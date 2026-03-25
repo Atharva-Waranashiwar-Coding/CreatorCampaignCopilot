@@ -41,3 +41,15 @@ class Campaign(TimestampMixin, Base):
         cascade="all, delete-orphan",
         lazy="selectin",
     )
+    assets: Mapped[list["CampaignAsset"]] = relationship(
+        back_populates="campaign",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+        order_by="CampaignAsset.created_at.desc()",
+    )
+    calendar_items: Mapped[list["CalendarItem"]] = relationship(
+        back_populates="campaign",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+        order_by="CalendarItem.scheduled_for.asc()",
+    )

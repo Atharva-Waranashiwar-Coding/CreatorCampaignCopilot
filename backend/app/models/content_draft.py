@@ -41,3 +41,15 @@ class ContentDraft(TimestampMixin, Base):
         lazy="selectin",
         order_by="DraftReview.created_at.desc()",
     )
+    versions: Mapped[list["DraftVersion"]] = relationship(
+        back_populates="draft",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+        order_by="DraftVersion.version_number.desc()",
+    )
+    calendar_item: Mapped["CalendarItem | None"] = relationship(
+        back_populates="draft",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+        uselist=False,
+    )
