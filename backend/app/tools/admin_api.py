@@ -35,10 +35,18 @@ def read_helper_tool_catalog(
 @router.get("/usage", response_model=list[ToolUsageLogRead])
 def read_recent_tool_usage(
     limit: int = Query(default=20, ge=1, le=100),
+    draft_id: int | None = Query(default=None, ge=1),
+    advanced_only: bool = Query(default=False),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> list[ToolUsageLogRead]:
     try:
-        return list_recent_tool_usage(db, user=current_user, limit=limit)
+        return list_recent_tool_usage(
+            db,
+            user=current_user,
+            limit=limit,
+            draft_id=draft_id,
+            advanced_only=advanced_only,
+        )
     except Exception as exc:
         _raise_service_error(exc)

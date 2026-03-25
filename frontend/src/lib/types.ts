@@ -622,6 +622,104 @@ export type HelperToolCatalog = {
   tools: HelperToolCatalogItem[];
 };
 
+export type ValidationCheckStatus = "pass" | "warn" | "fail";
+
+export type ValidationCheck = {
+  check: string;
+  status: ValidationCheckStatus;
+  detail: string;
+};
+
+export type AdvancedToolContext = {
+  draft_id: number | null;
+  brand_id: number;
+  brand_name: string;
+  campaign_id: number | null;
+  campaign_name: string | null;
+  title: string | null;
+  platform: string | null;
+  content_type: string | null;
+};
+
+export type BrandVoiceValidatorResponse = {
+  context: AdvancedToolContext;
+  score: number;
+  verdict: "pass" | "warn" | "fail";
+  summary: string;
+  aligned_traits: string[];
+  missing_traits: string[];
+  checks: ValidationCheck[];
+  revision_suggestions: string[];
+};
+
+export type CrossChannelAdaptationResponse = {
+  context: AdvancedToolContext;
+  source_platform: string;
+  target_platform: string;
+  adapted_title: string | null;
+  adapted_body: string;
+  recommended_content_type: string | null;
+  adaptation_notes: string[];
+  warnings: string[];
+  derived_hashtags: string[];
+};
+
+export type TemplateRecommendationItem = {
+  id: number;
+  name: string;
+  description: string | null;
+  template_type: string;
+  platform: string | null;
+  content_type: string | null;
+  score: number;
+  reasons: string[];
+  excerpt: string;
+  updated_at: string;
+};
+
+export type TemplateRecommendationResponse = {
+  context: AdvancedToolContext;
+  total_candidates: number;
+  recommendations: TemplateRecommendationItem[];
+};
+
+export type AssetRecommendationItem = {
+  id: number;
+  name: string;
+  asset_type: string;
+  file_url: string;
+  thumbnail_url: string | null;
+  mime_type: string | null;
+  file_size_bytes: number | null;
+  notes: string | null;
+  updated_at: string;
+  score: number;
+  reasons: string[];
+};
+
+export type AssetRecommendationResponse = {
+  context: AdvancedToolContext;
+  total_candidates: number;
+  recommendations: AssetRecommendationItem[];
+};
+
+export type RevisionChecklistItem = {
+  item: string;
+  priority: "high" | "medium" | "low";
+  source_action: DraftReviewAction;
+  source_excerpt: string;
+  guidance: string;
+};
+
+export type ReviewFeedbackToRevisionChecklistResponse = {
+  context: AdvancedToolContext;
+  summary: string;
+  checklist_items: RevisionChecklistItem[];
+  preserved_strengths: string[];
+  source_comment_count: number;
+  blocker_count: number;
+};
+
 export type ToolUsageLog = {
   id: number;
   tool_name: string;
@@ -629,6 +727,8 @@ export type ToolUsageLog = {
   actor_name: string | null;
   brand_id: number | null;
   brand_name: string | null;
+  campaign_id: number | null;
+  draft_id: number | null;
   target_entity_type: string;
   target_entity_id: number | null;
   invocation_source: string;
@@ -636,6 +736,8 @@ export type ToolUsageLog = {
   error_detail: string | null;
   request_payload: Record<string, unknown>;
   result_summary: Record<string, unknown>;
+  request_trace: Record<string, unknown> | null;
+  result_trace: Record<string, unknown> | null;
   created_at: string;
 };
 

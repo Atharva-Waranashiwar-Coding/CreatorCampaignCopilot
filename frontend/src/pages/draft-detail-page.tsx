@@ -5,6 +5,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { EditorToolbar } from "../components/draft-editor/editor-toolbar";
 import { PlatformPreview } from "../components/draft-preview/platform-preview";
+import { AdvancedHelperWorkbench } from "../components/helper-tools/advanced-helper-workbench";
 import { AssignmentPanel } from "../components/collaboration/assignment-panel";
 import { ThreadedCommentsCard } from "../components/collaboration/threaded-comments-card";
 import { PageHeader } from "../components/shared/page-header";
@@ -262,6 +263,26 @@ export function DraftDetailPage() {
     });
   };
 
+  const replaceDraftValuesFromHelper = ({
+    title,
+    contentBody,
+  }: {
+    title?: string | null;
+    contentBody: string;
+  }) => {
+    setForm((current) => {
+      if (!current) {
+        return current;
+      }
+
+      return {
+        ...current,
+        title: title?.trim() ? title : current.title,
+        content_body: contentBody,
+      };
+    });
+  };
+
   if (draftQuery.isLoading || reviewThreadQuery.isLoading || versionsQuery.isLoading || !draft || !form || !reviewThread) {
     return (
       <Card className="border-white/70 bg-white/85 p-8 shadow-xl shadow-slate-900/5">
@@ -390,6 +411,13 @@ export function DraftDetailPage() {
               statusType: draft.status_type,
               title: form.title,
             }}
+          />
+
+          <AdvancedHelperWorkbench
+            draft={draft}
+            form={form}
+            onInsertBodySnippet={insertEditorSnippet}
+            onReplaceDraftValues={replaceDraftValuesFromHelper}
           />
 
           <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
