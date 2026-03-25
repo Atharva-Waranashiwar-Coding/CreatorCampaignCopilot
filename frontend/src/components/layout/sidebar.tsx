@@ -82,7 +82,7 @@ export function Sidebar({ notificationUnreadCount, userName, userEmail, onLogout
   const navigate = useNavigate();
 
   return (
-    <aside className="hidden min-h-[calc(100vh-2rem)] min-w-0 flex-col rounded-[2rem] border border-slate-900/10 bg-[linear-gradient(180deg,rgba(14,52,68,0.98),rgba(21,35,48,0.98))] p-5 text-white shadow-[0_28px_80px_-42px_rgba(15,23,42,0.95)] lg:flex lg:sticky lg:top-4">
+    <aside className="hidden min-h-[calc(100vh-2rem)] min-w-0 w-full flex-col rounded-[2rem] border border-slate-900/10 bg-[linear-gradient(180deg,rgba(14,52,68,0.98),rgba(21,35,48,0.98))] p-5 text-white shadow-[0_28px_80px_-42px_rgba(15,23,42,0.95)] lg:flex lg:sticky lg:top-4">
       <div className="rounded-[1.5rem] border border-white/10 bg-white/[0.05] px-4 py-4">
         <p className="text-[0.68rem] font-semibold uppercase tracking-[0.32em] text-white/52">Creator Campaign Copilot</p>
         <h2 className="mt-3 text-2xl font-semibold tracking-tight text-white">Content ops workspace</h2>

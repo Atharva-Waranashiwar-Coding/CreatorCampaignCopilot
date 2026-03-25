@@ -29,7 +29,7 @@ export function AppShell({ children, notificationUnreadCount, userName, userEmai
 
   return (
     <div className="min-h-screen px-3 py-3 md:px-5 md:py-5">
-      <div className="mx-auto flex max-w-[1600px] gap-5">
+      <div className="mx-auto grid max-w-[1600px] gap-5 lg:grid-cols-[minmax(240px,25%)_minmax(0,1fr)]">
         <Sidebar
           notificationUnreadCount={notificationUnreadCount}
           userName={userName}
@@ -37,7 +37,7 @@ export function AppShell({ children, notificationUnreadCount, userName, userEmai
           onLogout={onLogout}
         />
 
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0">
           <header className="sticky top-3 z-20 rounded-[1.75rem] border border-white/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(252,249,244,0.9))] px-4 py-4 shadow-[0_16px_50px_-30px_rgba(15,23,42,0.55)] backdrop-blur md:px-6 md:py-5">
             <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
               <div className="min-w-0">
