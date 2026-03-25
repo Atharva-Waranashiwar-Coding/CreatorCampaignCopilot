@@ -3,6 +3,7 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.enums import BrandRole
+from app.schemas.draft_workflow import DraftWorkflowRead, DraftWorkflowWrite
 
 
 class BrandCreate(BaseModel):
@@ -14,6 +15,7 @@ class BrandCreate(BaseModel):
     target_audience: str | None = None
     preferred_channels: list[str] = Field(default_factory=list)
     guidelines_summary: str | None = None
+    draft_workflow: DraftWorkflowWrite | None = None
 
 
 class BrandUpdate(BaseModel):
@@ -25,6 +27,7 @@ class BrandUpdate(BaseModel):
     target_audience: str | None = None
     preferred_channels: list[str] | None = None
     guidelines_summary: str | None = None
+    draft_workflow: DraftWorkflowWrite | None = None
 
 
 class BrandRead(BaseModel):
@@ -39,6 +42,7 @@ class BrandRead(BaseModel):
     target_audience: str | None
     preferred_channels: list[str]
     guidelines_summary: str | None
+    draft_workflow: DraftWorkflowRead
     created_by: int
     created_at: datetime
     updated_at: datetime

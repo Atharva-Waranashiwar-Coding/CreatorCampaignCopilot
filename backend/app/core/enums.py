@@ -37,6 +37,29 @@ class DraftStatus(StrEnum):
     REJECTED = "rejected"
 
 
+class DraftStageType(StrEnum):
+    BACKLOG = "backlog"
+    IN_PROGRESS = "in_progress"
+    REVIEW = "review"
+    APPROVED = "approved"
+    SCHEDULED = "scheduled"
+    PUBLISHED = "published"
+    CHANGES_REQUESTED = "changes_requested"
+
+
+class CampaignMilestoneKey(StrEnum):
+    BRIEF_APPROVED = "brief_approved"
+    FIRST_DRAFTS_READY = "first_drafts_ready"
+    ALL_REVIEWS_COMPLETE = "all_reviews_complete"
+    CAMPAIGN_LAUNCH_READY = "campaign_launch_ready"
+    CAMPAIGN_COMPLETED = "campaign_completed"
+
+
+class CampaignDependencyNodeType(StrEnum):
+    CAMPAIGN_MILESTONE = "campaign_milestone"
+    DRAFT_STAGE = "draft_stage"
+
+
 class DraftReviewAction(StrEnum):
     COMMENTED = "commented"
     SUBMITTED = "submitted"

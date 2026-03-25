@@ -3,13 +3,15 @@ from collections import Counter
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
-from app.core.enums import CampaignStatus, DraftStatus, MembershipStatus
+from app.core.enums import CampaignStatus, DraftStageType, MembershipStatus
 from app.core.permissions import WORKSPACE_MANAGEMENT_ROLES, require_role
 from app.models.audit_log import AuditLog
 from app.models.brand_membership import BrandMembership
 from app.models.calendar_item import CalendarItem
 from app.models.campaign import Campaign
 from app.models.campaign_asset import CampaignAsset
+from app.models.campaign_dependency import CampaignDependency
+from app.models.campaign_milestone import CampaignMilestone
 from app.models.content_draft import ContentDraft
 from app.models.draft_version import DraftVersion
 from app.models.project import Project
@@ -20,14 +22,17 @@ from app.schemas.campaign import CampaignCreate, CampaignRead, CampaignUpdate
 from app.schemas.campaign_asset import CampaignAssetRead
 from app.schemas.campaign_workspace import CampaignOverviewRead, CampaignPlanningSummaryRead
 from app.schemas.content_brief import ContentBriefRead
-from app.schemas.content_draft import ContentDraftRead, DraftStatusCount
+from app.schemas.content_draft import ContentDraftRead, DraftWorkflowStageCount
 from app.schemas.draft_version import DraftVersionRead
 from app.services.access import assert_brand_limit_available
 from app.services.audit import record_audit_log
+from app.services.campaign_dependencies import serialize_campaign_dependency
+from app.services.campaign_milestones import ensure_campaign_milestones, serialize_campaign_milestone
+from app.services.draft_workflows import get_brand_draft_workflow, get_workflow_stage_or_raise
 
 
-def _coerce_draft_status(value: DraftStatus | str) -> DraftStatus:
-    return value if isinstance(value, DraftStatus) else DraftStatus(value)
+def _coerce_draft_status(value: str) -> str:
+    return str(value)
 
 
 def _serialize_campaign(campaign: Campaign) -> CampaignRead:
@@ -96,6 +101,7 @@ def _serialize_draft_version(version: DraftVersion) -> DraftVersionRead:
     draft = version.draft
     campaign = draft.campaign
     project = campaign.project
+    stage = get_workflow_stage_or_raise(get_brand_draft_workflow(project.brand), version.status)
     return DraftVersionRead(
         id=version.id,
         draft_id=version.draft_id,
@@ -111,7 +117,10 @@ def _serialize_draft_version(version: DraftVersion) -> DraftVersionRead:
         platform=version.platform,
         content_type=version.content_type,
         content_body=version.content_body,
-        status=_coerce_draft_status(version.status),
+        status=stage.key,
+        status_label=stage.label,
+        status_type=stage.stage_type,
+        status_color=stage.color,
         planned_publish_at=version.planned_publish_at,
         change_summary=version.change_summary,
         created_by=version.created_by,
@@ -129,6 +138,12 @@ def _get_campaign_with_role(db: Session, *, campaign_id: int, user_id: int) -> t
             selectinload(Campaign.project).selectinload(Project.brand),
             selectinload(Campaign.brief),
             selectinload(Campaign.assets).joinedload(CampaignAsset.creator),
+            selectinload(Campaign.dependencies).joinedload(CampaignDependency.creator),
+            selectinload(Campaign.dependencies).joinedload(CampaignDependency.dependent_milestone),
+            selectinload(Campaign.dependencies).joinedload(CampaignDependency.blocker_milestone),
+            selectinload(Campaign.dependencies).joinedload(CampaignDependency.dependent_draft),
+            selectinload(Campaign.dependencies).joinedload(CampaignDependency.blocker_draft),
+            selectinload(Campaign.milestones).joinedload(CampaignMilestone.completed_by),
             selectinload(Campaign.calendar_items).joinedload(CalendarItem.creator),
             selectinload(Campaign.calendar_items).joinedload(CalendarItem.draft),
             selectinload(Campaign.drafts).selectinload(ContentDraft.creator),
@@ -200,7 +215,7 @@ def _serialize_brief_for_campaign(campaign: Campaign) -> ContentBriefRead | None
 
 
 def _serialize_draft_for_campaign(draft: ContentDraft) -> ContentDraftRead:
-    status = _coerce_draft_status(draft.status)
+    stage = get_workflow_stage_or_raise(get_brand_draft_workflow(draft.campaign.project.brand), draft.status)
     latest_review = draft.reviews[0] if draft.reviews else None
     return ContentDraftRead(
         id=draft.id,
@@ -214,7 +229,10 @@ def _serialize_draft_for_campaign(draft: ContentDraft) -> ContentDraftRead:
         platform=draft.platform,
         content_type=draft.content_type,
         content_body=draft.content_body,
-        status=status,
+        status=stage.key,
+        status_label=stage.label,
+        status_type=stage.stage_type,
+        status_color=stage.color,
         planned_publish_at=draft.planned_publish_at,
         current_version_number=draft.current_version_number,
         created_by=draft.created_by,
@@ -251,8 +269,14 @@ def _belongs_to_campaign(log: AuditLog, campaign_id: int) -> bool:
 
 def get_campaign_overview(db: Session, *, campaign_id: int, user: User) -> CampaignOverviewRead:
     campaign, _ = _get_campaign_with_role(db, campaign_id=campaign_id, user_id=user.id)
+    ensure_campaign_milestones(db, campaign=campaign)
+    db.refresh(campaign, attribute_names=["milestones"])
     ordered_drafts = sorted(campaign.drafts, key=lambda draft: draft.created_at, reverse=True)
+    workflow = get_brand_draft_workflow(campaign.project.brand)
     status_counts = Counter(_coerce_draft_status(draft.status) for draft in ordered_drafts)
+    stage_type_counts = Counter(
+        get_workflow_stage_or_raise(workflow, draft.status).stage_type for draft in ordered_drafts
+    )
     next_planned_publish_at = min(
         (draft.planned_publish_at for draft in ordered_drafts if draft.planned_publish_at is not None),
         default=None,
@@ -279,24 +303,32 @@ def get_campaign_overview(db: Session, *, campaign_id: int, user: User) -> Campa
 
     return CampaignOverviewRead(
         campaign=_serialize_campaign(campaign),
+        draft_workflow=workflow,
         brief=_serialize_brief_for_campaign(campaign),
         drafts=[_serialize_draft_for_campaign(draft) for draft in ordered_drafts],
         assets=[_serialize_asset(asset) for asset in campaign.assets],
+        milestones=[serialize_campaign_milestone(milestone) for milestone in campaign.milestones],
+        dependencies=[serialize_campaign_dependency(dependency, workflow=workflow) for dependency in campaign.dependencies],
         recent_versions=[_serialize_draft_version(version) for version in recent_versions],
         schedule=[_serialize_calendar_item(item) for item in campaign.calendar_items],
         status_breakdown=[
-            DraftStatusCount(status=status, count=status_counts.get(status, 0))
-            for status in DraftStatus
+            DraftWorkflowStageCount(
+                status=stage.key,
+                status_label=stage.label,
+                status_type=stage.stage_type,
+                count=status_counts.get(stage.key, 0),
+            )
+            for stage in workflow.stages
         ],
         planning_summary=CampaignPlanningSummaryRead(
             total_drafts=len(ordered_drafts),
-            idea_count=status_counts.get(DraftStatus.IDEA, 0),
-            draft_count=status_counts.get(DraftStatus.DRAFT, 0),
-            in_review_count=status_counts.get(DraftStatus.IN_REVIEW, 0),
-            approved_count=status_counts.get(DraftStatus.APPROVED, 0),
-            scheduled_count=status_counts.get(DraftStatus.SCHEDULED, 0),
-            published_count=status_counts.get(DraftStatus.PUBLISHED, 0),
-            rejected_count=status_counts.get(DraftStatus.REJECTED, 0),
+            idea_count=stage_type_counts.get(DraftStageType.BACKLOG, 0),
+            draft_count=stage_type_counts.get(DraftStageType.IN_PROGRESS, 0),
+            in_review_count=stage_type_counts.get(DraftStageType.REVIEW, 0),
+            approved_count=stage_type_counts.get(DraftStageType.APPROVED, 0),
+            scheduled_count=stage_type_counts.get(DraftStageType.SCHEDULED, 0),
+            published_count=stage_type_counts.get(DraftStageType.PUBLISHED, 0),
+            rejected_count=stage_type_counts.get(DraftStageType.CHANGES_REQUESTED, 0),
             next_planned_publish_at=next_planned_publish_at,
         ),
         activity_timeline=activity_timeline,
@@ -348,6 +380,7 @@ def create_campaign(db: Session, *, payload: CampaignCreate, user: User) -> Camp
     )
     db.add(campaign)
     db.flush()
+    ensure_campaign_milestones(db, campaign=campaign)
 
     record_audit_log(
         db,

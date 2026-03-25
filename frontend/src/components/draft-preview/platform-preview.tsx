@@ -8,7 +8,7 @@ import { EmailPreview } from "./email-preview";
 import { InstagramCaptionPreview } from "./instagram-caption-preview";
 import { LinkedInPreview } from "./linkedin-preview";
 import type { DraftPreviewInput, PreviewMode } from "./preview-utils";
-import { previewLabel, previewTitle, resolvePreviewKind } from "./preview-utils";
+import { previewLabel, previewStatusTone, previewTitle, resolvePreviewKind } from "./preview-utils";
 
 const previewModes: Array<{ description: string; mode: PreviewMode; title: string }> = [
   { description: "Detect from platform and content type.", mode: "auto", title: "Auto" },
@@ -39,8 +39,8 @@ export function PlatformPreview({ input }: PlatformPreviewProps) {
         <div className="flex flex-wrap items-center gap-2">
           <Badge>{input.platform || "No platform"}</Badge>
           <Badge tone="muted">{input.contentType || "No content type"}</Badge>
-          <Badge tone={input.status === "approved" || input.status === "published" ? "success" : "warning"}>
-            {formatStatusLabel(input.status)}
+          <Badge tone={previewStatusTone(input.statusType)}>
+            {formatStatusLabel(input.status, input.statusLabel)}
           </Badge>
         </div>
       </div>

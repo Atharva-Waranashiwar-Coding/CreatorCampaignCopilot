@@ -592,7 +592,9 @@ function RevisionCyclesCard({
                   {draft.revision_cycle_count} cycles · {draft.rejection_count} rejections
                 </Badge>
               </div>
-              <p className="mt-3 text-sm text-muted-foreground">Current status: {formatStatusLabel(draft.status)}</p>
+              <p className="mt-3 text-sm text-muted-foreground">
+                Current status: {formatStatusLabel(draft.status, draft.status_label)}
+              </p>
             </div>
           ))}
         </div>

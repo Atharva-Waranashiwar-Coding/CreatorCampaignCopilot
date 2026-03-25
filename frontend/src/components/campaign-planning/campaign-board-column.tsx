@@ -1,7 +1,7 @@
 import type { DragEventHandler, ReactNode } from "react";
 
-import type { DraftStatus } from "../../lib/types";
-import { boardColumnMeta } from "./planning-constants";
+import type { DraftWorkflowStage } from "../../lib/types";
+import { workflowStageMeta } from "./planning-constants";
 
 type CampaignBoardColumnProps = {
   canDrop?: boolean;
@@ -11,7 +11,7 @@ type CampaignBoardColumnProps = {
   onDragLeave?: DragEventHandler<HTMLDivElement>;
   onDragOver?: DragEventHandler<HTMLDivElement>;
   onDrop?: DragEventHandler<HTMLDivElement>;
-  status: DraftStatus;
+  stage: DraftWorkflowStage;
 };
 
 export function CampaignBoardColumn({
@@ -22,9 +22,9 @@ export function CampaignBoardColumn({
   onDragLeave,
   onDragOver,
   onDrop,
-  status,
+  stage,
 }: CampaignBoardColumnProps) {
-  const meta = boardColumnMeta[status];
+  const meta = workflowStageMeta(stage);
 
   return (
     <div

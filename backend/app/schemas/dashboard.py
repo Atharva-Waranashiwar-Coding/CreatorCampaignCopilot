@@ -3,7 +3,6 @@ from datetime import date, datetime
 from pydantic import BaseModel
 
 from app.schemas.audit_log import AuditLogRead
-from app.schemas.content_draft import DraftStatus
 
 
 class DashboardSummary(BaseModel):
@@ -48,7 +47,7 @@ class DashboardMemberBucket(BaseModel):
 
 
 class DashboardStatusBottleneck(BaseModel):
-    status: DraftStatus
+    status: str
     label: str
     count: int
     stale_count: int
@@ -92,7 +91,8 @@ class DashboardRevisionCycleItem(BaseModel):
     campaign_name: str
     revision_cycle_count: int
     rejection_count: int
-    status: DraftStatus
+    status: str
+    status_label: str
 
 
 class DashboardApprovalAnalytics(BaseModel):

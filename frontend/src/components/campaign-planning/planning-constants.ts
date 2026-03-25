@@ -1,65 +1,40 @@
-import type { BrandRole, ContentDraft, DraftStatus } from "../../lib/types";
+import type { BrandRole, ContentDraft, DraftWorkflow, DraftWorkflowStage } from "../../lib/types";
 
 export type PlannerView = "board" | "list" | "calendar";
-
-export const primaryBoardStatuses: DraftStatus[] = [
-  "idea",
-  "draft",
-  "in_review",
-  "approved",
-  "scheduled",
-  "published",
-];
-
-export const secondaryBoardStatuses: DraftStatus[] = ["rejected"];
-
-export const boardColumnMeta: Record<DraftStatus, { accentClass: string; description: string; label: string }> = {
-  idea: {
-    accentClass: "from-amber-100 to-white",
-    description: "Loose concepts and early hooks.",
-    label: "Idea",
-  },
-  draft: {
-    accentClass: "from-sky-100 to-white",
-    description: "Working copy in active editing.",
-    label: "Draft",
-  },
-  in_review: {
-    accentClass: "from-amber-50 to-white",
-    description: "Waiting on review feedback.",
-    label: "In Review",
-  },
-  approved: {
-    accentClass: "from-emerald-100 to-white",
-    description: "Cleared and ready to schedule.",
-    label: "Approved",
-  },
-  scheduled: {
-    accentClass: "from-cyan-100 to-white",
-    description: "Placed on the campaign calendar.",
-    label: "Scheduled",
-  },
-  published: {
-    accentClass: "from-slate-200 to-white",
-    description: "Live and shipped.",
-    label: "Published",
-  },
-  rejected: {
-    accentClass: "from-rose-100 to-white",
-    description: "Needs changes before the next review pass.",
-    label: "Needs Changes",
-  },
-};
 
 const workspaceRoles: BrandRole[] = ["owner", "admin", "editor"];
 const reviewRoles: BrandRole[] = ["owner", "admin", "reviewer"];
 
-export function groupDraftsByStatus(drafts: ContentDraft[]) {
-  const groups = new Map<DraftStatus, ContentDraft[]>();
+const colorClassMap: Record<string, string> = {
+  amber: "from-amber-100 to-white",
+  sky: "from-sky-100 to-white",
+  emerald: "from-emerald-100 to-white",
+  cyan: "from-cyan-100 to-white",
+  rose: "from-rose-100 to-white",
+  orange: "from-orange-100 to-white",
+  blue: "from-blue-100 to-white",
+  slate: "from-slate-200 to-white",
+};
 
-  [...primaryBoardStatuses, ...secondaryBoardStatuses].forEach((status) => {
-    groups.set(status, []);
-  });
+export function workflowStageMap(workflow: DraftWorkflow) {
+  return new Map(workflow.stages.map((stage) => [stage.key, stage]));
+}
+
+export function workflowBoardStages(workflow: DraftWorkflow) {
+  return workflow.stages;
+}
+
+export function workflowStageMeta(stage: DraftWorkflowStage) {
+  return {
+    accentClass: colorClassMap[stage.color] ?? "from-slate-100 to-white",
+    description: stage.description ?? defaultStageDescription(stage),
+    label: stage.label,
+  };
+}
+
+export function groupDraftsByStatus(drafts: ContentDraft[], workflow: DraftWorkflow) {
+  const groups = new Map<string, ContentDraft[]>();
+  workflow.stages.forEach((stage) => groups.set(stage.key, []));
 
   drafts.forEach((draft) => {
     groups.set(draft.status, [...(groups.get(draft.status) ?? []), draft]);
@@ -76,35 +51,73 @@ export function groupDraftsByStatus(drafts: ContentDraft[]) {
 }
 
 export function canMoveDraftToStage(
-  currentStatus: DraftStatus,
-  targetStatus: DraftStatus,
+  draft: ContentDraft,
+  targetStage: DraftWorkflowStage,
+  workflow: DraftWorkflow,
   role: BrandRole | undefined,
 ) {
-  if (!role || currentStatus === targetStatus || targetStatus === "rejected") {
+  if (!role || draft.status === targetStage.key) {
     return false;
   }
 
-  if (workspaceRoles.includes(role)) {
-    if (currentStatus === "idea" && (targetStatus === "draft" || targetStatus === "in_review")) {
-      return true;
-    }
-    if (currentStatus === "draft" && (targetStatus === "idea" || targetStatus === "in_review")) {
-      return true;
-    }
-    if (currentStatus === "rejected" && targetStatus === "in_review") {
-      return true;
-    }
-    if (currentStatus === "approved" && (targetStatus === "scheduled" || targetStatus === "published")) {
-      return true;
-    }
-    if (currentStatus === "scheduled" && targetStatus === "published") {
-      return true;
-    }
+  const currentStage = workflowStageMap(workflow).get(draft.status);
+  if (!currentStage || !currentStage.allowed_next_stage_keys.includes(targetStage.key)) {
+    return false;
   }
 
-  if (reviewRoles.includes(role) && currentStatus === "in_review" && targetStatus === "approved") {
-    return true;
+  if (targetStage.stage_type === "changes_requested") {
+    return false;
   }
 
-  return false;
+  if (targetStage.stage_type === "approved") {
+    return reviewRoles.includes(role);
+  }
+
+  if (targetStage.stage_type === "review") {
+    return workspaceRoles.includes(role);
+  }
+
+  if (currentStage.stage_type === "review") {
+    return false;
+  }
+
+  return workspaceRoles.includes(role);
+}
+
+export function emptyColumnMessage(stage: DraftWorkflowStage) {
+  switch (stage.stage_type) {
+    case "backlog":
+      return "Early concepts land here before active drafting begins.";
+    case "in_progress":
+      return "Working drafts will collect here while copy is in motion.";
+    case "review":
+      return "Nothing is waiting on reviewer feedback right now.";
+    case "approved":
+      return "Approved work will appear here before launch prep.";
+    case "scheduled":
+      return "Scheduled work will stack here before publish.";
+    case "published":
+      return "Shipped content becomes the campaign archive.";
+    case "changes_requested":
+      return "Requested changes stay visible here until the next pass.";
+  }
+}
+
+function defaultStageDescription(stage: DraftWorkflowStage) {
+  switch (stage.stage_type) {
+    case "backlog":
+      return "Loose concepts and early hooks.";
+    case "in_progress":
+      return "Working copy in active editing.";
+    case "review":
+      return "Waiting on reviewer feedback.";
+    case "approved":
+      return "Cleared and ready to schedule.";
+    case "scheduled":
+      return "Placed on the campaign calendar.";
+    case "published":
+      return "Live and shipped.";
+    case "changes_requested":
+      return "Needs changes before the next review pass.";
+  }
 }

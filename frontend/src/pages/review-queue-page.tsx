@@ -45,7 +45,7 @@ export function ReviewQueuePage() {
                 <div className="flex flex-wrap items-center gap-3">
                   <h3 className="text-base font-semibold">{draft.title}</h3>
                   <Badge>{draft.platform}</Badge>
-                  <Badge tone="warning">{formatStatusLabel(draft.status)}</Badge>
+                  <Badge tone="warning">{formatStatusLabel(draft.status, draft.status_label)}</Badge>
                   <Badge tone="muted">v{draft.current_version_number}</Badge>
                 </div>
                 <p className="mt-2 text-sm text-muted-foreground">

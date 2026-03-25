@@ -19,6 +19,7 @@ class Brand(TimestampMixin, Base):
     target_audience: Mapped[str | None] = mapped_column(Text)
     preferred_channels: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     guidelines_summary: Mapped[str | None] = mapped_column(Text)
+    draft_workflow_config: Mapped[list[dict[str, object]]] = mapped_column(JSON, nullable=False, default=list)
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
 
     creator: Mapped["User"] = relationship(foreign_keys=[created_by])

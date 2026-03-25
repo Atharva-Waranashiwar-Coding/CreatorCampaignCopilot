@@ -2,7 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.core.enums import BrandRole, DraftReviewAction, DraftStatus
+from app.core.enums import BrandRole, DraftReviewAction
 from app.schemas.collaboration_comment import MentionRead
 
 
@@ -25,8 +25,10 @@ class DraftReviewRead(BaseModel):
     comment: str | None
     mentions: list[MentionRead] = []
     version_number: int
-    from_status: DraftStatus | None = None
-    to_status: DraftStatus | None = None
+    from_status: str | None = None
+    from_status_label: str | None = None
+    to_status: str | None = None
+    to_status_label: str | None = None
     created_at: datetime
 
 
