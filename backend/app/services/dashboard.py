@@ -26,7 +26,8 @@ def get_dashboard_summary(db: Session, *, user: User) -> DashboardSummary:
             campaign_count=0,
             active_campaign_count=0,
             draft_count=0,
-            in_review_draft_count=0,
+            pending_review_count=0,
+            approved_draft_count=0,
             recent_activity=[],
         )
 
@@ -48,13 +49,22 @@ def get_dashboard_summary(db: Session, *, user: User) -> DashboardSummary:
         .join(Project, Project.id == Campaign.project_id)
         .where(Project.brand_id.in_(brand_ids))
     ) or 0
-    in_review_draft_count = db.scalar(
+    pending_review_count = db.scalar(
         select(func.count(ContentDraft.id))
         .join(Campaign, Campaign.id == ContentDraft.campaign_id)
         .join(Project, Project.id == Campaign.project_id)
         .where(
             Project.brand_id.in_(brand_ids),
             ContentDraft.status == DraftStatus.IN_REVIEW,
+        )
+    ) or 0
+    approved_draft_count = db.scalar(
+        select(func.count(ContentDraft.id))
+        .join(Campaign, Campaign.id == ContentDraft.campaign_id)
+        .join(Project, Project.id == Campaign.project_id)
+        .where(
+            Project.brand_id.in_(brand_ids),
+            ContentDraft.status == DraftStatus.APPROVED,
         )
     ) or 0
 
@@ -72,7 +82,8 @@ def get_dashboard_summary(db: Session, *, user: User) -> DashboardSummary:
         campaign_count=campaign_count,
         active_campaign_count=active_campaign_count,
         draft_count=draft_count,
-        in_review_draft_count=in_review_draft_count,
+        pending_review_count=pending_review_count,
+        approved_draft_count=approved_draft_count,
         recent_activity=[
             AuditLogRead(
                 id=log.id,

@@ -35,3 +35,11 @@ class DraftStatus(StrEnum):
     SCHEDULED = "scheduled"
     PUBLISHED = "published"
     REJECTED = "rejected"
+
+
+class DraftReviewAction(StrEnum):
+    COMMENTED = "commented"
+    SUBMITTED = "submitted"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    RESUBMITTED = "resubmitted"

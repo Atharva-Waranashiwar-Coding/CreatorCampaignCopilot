@@ -13,7 +13,7 @@ import { Textarea } from "../components/ui/textarea";
 import { Select } from "../components/ui/select";
 import { useAuthStore } from "../features/auth/auth-store";
 import { ApiError, apiRequest } from "../lib/api";
-import { formatDate, formatDateTime } from "../lib/format";
+import { formatActionLabel, formatDate, formatDateTime, formatStatusLabel } from "../lib/format";
 import { queryClient } from "../lib/query-client";
 import type { CampaignOverview, DraftStatus } from "../lib/types";
 
@@ -21,10 +21,6 @@ const draftStatuses: DraftStatus[] = [
   "idea",
   "draft",
   "in_review",
-  "approved",
-  "scheduled",
-  "published",
-  "rejected",
 ];
 
 type BriefFormState = {
@@ -268,7 +264,7 @@ export function CampaignOverviewPage() {
             <div className="mt-5 grid gap-3 md:grid-cols-2">
               {overview.status_breakdown.map((item) => (
                 <div key={item.status} className="rounded-[1.25rem] border border-border bg-white/80 px-4 py-4">
-                  <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">{formatStatus(item.status)}</p>
+                  <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">{formatStatusLabel(item.status)}</p>
                   <p className="mt-3 text-3xl font-semibold tracking-tight">{item.count}</p>
                 </div>
               ))}
@@ -314,7 +310,7 @@ export function CampaignOverviewPage() {
                   >
                     {draftStatuses.map((status) => (
                       <option key={status} value={status}>
-                        {formatStatus(status)}
+                        {formatStatusLabel(status)}
                       </option>
                     ))}
                   </Select>
@@ -346,43 +342,86 @@ export function CampaignOverviewPage() {
         </div>
       </div>
 
-      <Card className="mt-8 border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Drafts</p>
-            <h2 className="mt-2 text-2xl font-semibold tracking-tight">Campaign working set</h2>
+      <div className="mt-8 grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+        <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Drafts</p>
+              <h2 className="mt-2 text-2xl font-semibold tracking-tight">Campaign working set</h2>
+            </div>
+            <Badge tone="muted">{overview.drafts.length} total</Badge>
           </div>
-          <Badge tone="muted">{overview.drafts.length} total</Badge>
-        </div>
 
-        <div className="mt-5 space-y-3">
-          {overview.drafts.length ? (
-            overview.drafts.map((draft) => (
-              <Link
-                key={draft.id}
-                className="block rounded-[1.25rem] border border-border bg-white/80 px-4 py-4 transition hover:bg-white"
-                to={`/drafts/${draft.id}`}
-              >
-                <div className="flex flex-wrap items-center gap-3">
-                  <h3 className="text-base font-semibold">{draft.title}</h3>
-                  <Badge>{draft.platform}</Badge>
-                  <Badge tone={draft.status === "in_review" ? "warning" : draft.status === "approved" ? "success" : "muted"}>
-                    {formatStatus(draft.status)}
-                  </Badge>
+          <div className="mt-5 space-y-3">
+            {overview.drafts.length ? (
+              overview.drafts.map((draft) => (
+                <Link
+                  key={draft.id}
+                  className="block rounded-[1.25rem] border border-border bg-white/80 px-4 py-4 transition hover:bg-white"
+                  to={`/drafts/${draft.id}`}
+                >
+                  <div className="flex flex-wrap items-center gap-3">
+                    <h3 className="text-base font-semibold">{draft.title}</h3>
+                    <Badge>{draft.platform}</Badge>
+                    <Badge tone={draft.status === "in_review" ? "warning" : draft.status === "approved" ? "success" : "muted"}>
+                      {formatStatusLabel(draft.status)}
+                    </Badge>
+                    <Badge tone="muted">{draft.review_count} reviews</Badge>
+                  </div>
+                  <p className="mt-2 text-sm text-muted-foreground">{draft.content_type}</p>
+                  {draft.latest_review_action ? (
+                    <p className="mt-3 text-sm text-muted-foreground">
+                      Latest review: {formatActionLabel(draft.latest_review_action)} · {formatDateTime(draft.latest_reviewed_at)}
+                    </p>
+                  ) : null}
+                  <p className="mt-3 text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                    Updated {formatDateTime(draft.updated_at)}
+                  </p>
+                </Link>
+              ))
+            ) : (
+              <p className="rounded-[1.25rem] border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
+                No drafts yet. Create the first working draft for this campaign above.
+              </p>
+            )}
+          </div>
+        </Card>
+
+        <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Campaign activity</p>
+              <h2 className="mt-2 text-2xl font-semibold tracking-tight">Timeline</h2>
+            </div>
+            <Badge tone="muted">{overview.activity_timeline.length} events</Badge>
+          </div>
+
+          <div className="mt-5 space-y-3">
+            {overview.activity_timeline.length ? (
+              overview.activity_timeline.map((item) => (
+                <div key={item.id} className="rounded-[1.25rem] border border-border bg-white/80 px-4 py-4">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Badge>{item.entity_type}</Badge>
+                    <p className="text-sm font-medium text-foreground">{formatActionLabel(item.action)}</p>
+                  </div>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    {item.actor_name ?? "Unknown user"} · {formatDateTime(item.created_at)}
+                  </p>
+                  {"version_number" in item.metadata ? (
+                    <p className="mt-3 text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                      Version {String(item.metadata.version_number)}
+                    </p>
+                  ) : null}
                 </div>
-                <p className="mt-2 text-sm text-muted-foreground">{draft.content_type}</p>
-                <p className="mt-3 text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                  Updated {formatDateTime(draft.updated_at)}
-                </p>
-              </Link>
-            ))
-          ) : (
-            <p className="rounded-[1.25rem] border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
-              No drafts yet. Create the first working draft for this campaign above.
-            </p>
-          )}
-        </div>
-      </Card>
+              ))
+            ) : (
+              <p className="rounded-[1.25rem] border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
+                Campaign activity will appear here once drafts begin moving through review.
+              </p>
+            )}
+          </div>
+        </Card>
+      </div>
     </div>
   );
 }
@@ -430,8 +469,4 @@ function splitList(value: string) {
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
-}
-
-function formatStatus(status: string) {
-  return status.replace(/_/g, " ");
 }

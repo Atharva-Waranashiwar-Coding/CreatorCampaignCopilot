@@ -6,10 +6,19 @@ from app.core.permissions import WORKSPACE_MANAGEMENT_ROLES, require_role
 from app.models.brand_membership import BrandMembership
 from app.models.campaign import Campaign
 from app.models.content_draft import ContentDraft
+from app.models.draft_review import DraftReview
 from app.models.project import Project
 from app.models.user import User
 from app.schemas.content_draft import ContentDraftCreate, ContentDraftRead, ContentDraftUpdate
 from app.services.audit import record_audit_log
+
+EDITORIAL_CREATE_STATUSES = {DraftStatus.IDEA, DraftStatus.DRAFT, DraftStatus.IN_REVIEW}
+EDITORIAL_STATUS_TRANSITIONS = {
+    DraftStatus.IDEA: {DraftStatus.DRAFT},
+    DraftStatus.DRAFT: {DraftStatus.IDEA},
+    DraftStatus.APPROVED: {DraftStatus.SCHEDULED, DraftStatus.PUBLISHED},
+    DraftStatus.SCHEDULED: {DraftStatus.PUBLISHED},
+}
 
 
 def _coerce_status(value: DraftStatus | str) -> DraftStatus:
@@ -18,6 +27,7 @@ def _coerce_status(value: DraftStatus | str) -> DraftStatus:
 
 def _serialize_draft(draft: ContentDraft) -> ContentDraftRead:
     status = _coerce_status(draft.status)
+    latest_review = draft.reviews[0] if draft.reviews else None
     return ContentDraftRead(
         id=draft.id,
         campaign_id=draft.campaign_id,
@@ -35,6 +45,9 @@ def _serialize_draft(draft: ContentDraft) -> ContentDraftRead:
         current_version_number=draft.current_version_number,
         created_by=draft.created_by,
         creator_name=draft.creator.full_name if draft.creator else None,
+        review_count=len(draft.reviews),
+        latest_review_action=latest_review.action if latest_review else None,
+        latest_reviewed_at=latest_review.created_at if latest_review else None,
         created_at=draft.created_at,
         updated_at=draft.updated_at,
     )
@@ -49,6 +62,7 @@ def _get_draft_with_role(db: Session, *, draft_id: int, user_id: int) -> tuple[C
         .options(
             selectinload(ContentDraft.campaign).selectinload(Campaign.project).selectinload(Project.brand),
             joinedload(ContentDraft.creator),
+            selectinload(ContentDraft.reviews).joinedload(DraftReview.actor),
         )
         .where(
             ContentDraft.id == draft_id,
@@ -79,6 +93,7 @@ def list_drafts(
         .options(
             selectinload(ContentDraft.campaign).selectinload(Campaign.project).selectinload(Project.brand),
             joinedload(ContentDraft.creator),
+            selectinload(ContentDraft.reviews),
         )
         .where(
             BrandMembership.user_id == user.id,
@@ -132,6 +147,8 @@ def create_draft(db: Session, *, payload: ContentDraftCreate, user: User) -> Con
         WORKSPACE_MANAGEMENT_ROLES,
         "You do not have permission to create drafts.",
     )
+    if payload.status not in EDITORIAL_CREATE_STATUSES:
+        raise ValueError("New drafts can only start as idea, draft, or in review.")
 
     draft = ContentDraft(
         campaign_id=campaign.id,
@@ -160,6 +177,16 @@ def create_draft(db: Session, *, payload: ContentDraftCreate, user: User) -> Con
     return get_draft(db, draft_id=draft.id, user=user)
 
 
+def _validate_editorial_status_transition(current_status: DraftStatus, next_status: DraftStatus) -> None:
+    if current_status == next_status:
+        return
+
+    if next_status in EDITORIAL_STATUS_TRANSITIONS.get(current_status, set()):
+        return
+
+    raise ValueError("Use the review workflow actions for this draft status transition.")
+
+
 def update_draft(db: Session, *, draft_id: int, payload: ContentDraftUpdate, user: User) -> ContentDraftRead:
     draft, membership = _get_draft_with_role(db, draft_id=draft_id, user_id=user.id)
     require_role(
@@ -170,14 +197,19 @@ def update_draft(db: Session, *, draft_id: int, payload: ContentDraftUpdate, use
 
     data = payload.model_dump(exclude_unset=True)
     previous_status = _coerce_status(draft.status)
+    next_status = None
+    if "status" in data and data["status"] is not None:
+        next_status = _coerce_status(data.pop("status"))
+        _validate_editorial_status_transition(previous_status, next_status)
+
     for field, value in data.items():
-        if field == "status" and value is not None:
-            setattr(draft, field, _coerce_status(value))
-        else:
-            setattr(draft, field, value.strip() if isinstance(value, str) else value)
+        setattr(draft, field, value.strip() if isinstance(value, str) else value)
+
+    if next_status is not None:
+        draft.status = next_status
 
     current_status = _coerce_status(draft.status)
-    if "status" in data and current_status != previous_status:
+    if next_status is not None and current_status != previous_status:
         record_audit_log(
             db,
             brand_id=draft.campaign.project.brand_id,
@@ -185,7 +217,25 @@ def update_draft(db: Session, *, draft_id: int, payload: ContentDraftUpdate, use
             entity_type="content_draft",
             entity_id=draft.id,
             action="draft.status_changed",
-            metadata={"from": previous_status.value, "to": current_status.value},
+            metadata={
+                "campaign_id": draft.campaign_id,
+                "from": previous_status.value,
+                "to": current_status.value,
+            },
+        )
+
+    if data:
+        record_audit_log(
+            db,
+            brand_id=draft.campaign.project.brand_id,
+            actor_user_id=user.id,
+            entity_type="content_draft",
+            entity_id=draft.id,
+            action="draft.updated",
+            metadata={
+                "campaign_id": draft.campaign_id,
+                "changes": {key: str(value) for key, value in data.items()},
+            },
         )
 
     db.commit()
