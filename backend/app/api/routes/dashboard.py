@@ -14,6 +14,8 @@ router = APIRouter()
 def _raise_service_error(exc: Exception) -> None:
     if isinstance(exc, PermissionError):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    if isinstance(exc, ValueError):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     raise exc
 
 
@@ -32,10 +34,11 @@ def read_dashboard_summary(
 @router.get("/analytics", response_model=DashboardAnalytics)
 def read_dashboard_analytics(
     brand_id: int | None = None,
+    interval: str = "month",
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> DashboardAnalytics:
     try:
-        return get_dashboard_analytics(db, user=current_user, brand_id=brand_id)
+        return get_dashboard_analytics(db, user=current_user, brand_id=brand_id, interval=interval)
     except Exception as exc:
         _raise_service_error(exc)

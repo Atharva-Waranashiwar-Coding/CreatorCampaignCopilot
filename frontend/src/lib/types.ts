@@ -325,6 +325,22 @@ export type DashboardDateBucket = {
   count: number;
 };
 
+export type DashboardMemberBucket = {
+  user_id: number;
+  name: string;
+  email: string;
+  count: number;
+  overdue_count: number;
+  due_soon_count: number;
+};
+
+export type DashboardStatusBottleneck = {
+  status: DraftStatus;
+  label: string;
+  count: number;
+  stale_count: number;
+};
+
 export type DashboardSummary = {
   brand_count: number;
   project_count: number;
@@ -363,11 +379,47 @@ export type DashboardScheduleAnalytics = {
   upcoming_by_day: DashboardDateBucket[];
 };
 
+export type DashboardWorkloadAnalytics = {
+  drafts_by_member: DashboardMemberBucket[];
+  pending_reviews_by_reviewer: DashboardMemberBucket[];
+  bottlenecks_by_status: DashboardStatusBottleneck[];
+};
+
+export type DashboardRevisionCycleItem = {
+  draft_id: number;
+  draft_title: string;
+  campaign_id: number;
+  campaign_name: string;
+  revision_cycle_count: number;
+  rejection_count: number;
+  status: DraftStatus;
+};
+
+export type DashboardApprovalAnalytics = {
+  average_review_time_hours: number;
+  average_approval_time_hours: number;
+  rejection_rate: number;
+  decision_count: number;
+  drafts_with_multiple_revision_cycles: DashboardRevisionCycleItem[];
+  multi_revision_draft_count: number;
+};
+
+export type DashboardContentMixAnalytics = {
+  interval: string;
+  by_platform: DashboardCountBucket[];
+  by_content_type: DashboardCountBucket[];
+  by_campaign_status: DashboardCountBucket[];
+  by_interval: DashboardDateBucket[];
+};
+
 export type DashboardAnalytics = {
   campaigns: DashboardCampaignAnalytics;
   drafts: DashboardDraftAnalytics;
   reviews: DashboardReviewAnalytics;
   schedule: DashboardScheduleAnalytics;
+  workload: DashboardWorkloadAnalytics;
+  approvals: DashboardApprovalAnalytics;
+  content_mix: DashboardContentMixAnalytics;
 };
 
 export type ContentTemplate = {
