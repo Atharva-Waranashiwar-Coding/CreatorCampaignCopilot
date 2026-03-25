@@ -14,6 +14,14 @@ from app.schemas.tool_usage_log import ToolUsageLogRead
 
 logger = logging.getLogger(__name__)
 
+ADVANCED_HELPER_TOOL_NAMES = {
+    "brand_voice_validator",
+    "cross_channel_adaptation",
+    "template_recommendation",
+    "asset_recommendation",
+    "review_feedback_to_revision_checklist",
+}
+
 
 def _compact_value(value: Any, *, max_string_length: int = 280, max_items: int = 12) -> Any:
     if hasattr(value, "model_dump"):
@@ -52,12 +60,18 @@ def record_tool_usage(
     request_payload: dict[str, Any],
     result_summary: dict[str, Any],
     was_successful: bool,
+    campaign_id: int | None = None,
+    draft_id: int | None = None,
     error_detail: str | None = None,
+    request_trace: dict[str, Any] | None = None,
+    result_trace: dict[str, Any] | None = None,
 ) -> ToolUsageLog:
     entry = ToolUsageLog(
         tool_name=tool_name,
         actor_user_id=actor_user_id,
         brand_id=brand_id,
+        campaign_id=campaign_id,
+        draft_id=draft_id,
         target_entity_type=target_entity_type,
         target_entity_id=target_entity_id,
         invocation_source=invocation_source,
@@ -65,6 +79,8 @@ def record_tool_usage(
         error_detail=error_detail,
         request_payload=_compact_value(request_payload),
         result_summary=_compact_value(result_summary),
+        request_trace=request_trace if request_trace is not None else request_payload,
+        result_trace=result_trace if result_trace is not None else result_summary,
     )
     db.add(entry)
     db.commit()
@@ -84,7 +100,11 @@ def safe_record_tool_usage(
     request_payload: dict[str, Any],
     result_summary: dict[str, Any],
     was_successful: bool,
+    campaign_id: int | None = None,
+    draft_id: int | None = None,
     error_detail: str | None = None,
+    request_trace: dict[str, Any] | None = None,
+    result_trace: dict[str, Any] | None = None,
 ) -> None:
     try:
         record_tool_usage(
@@ -92,6 +112,8 @@ def safe_record_tool_usage(
             tool_name=tool_name,
             actor_user_id=actor_user_id,
             brand_id=brand_id,
+            campaign_id=campaign_id,
+            draft_id=draft_id,
             target_entity_type=target_entity_type,
             target_entity_id=target_entity_id,
             invocation_source=invocation_source,
@@ -99,13 +121,22 @@ def safe_record_tool_usage(
             result_summary=result_summary,
             was_successful=was_successful,
             error_detail=error_detail,
+            request_trace=request_trace,
+            result_trace=result_trace,
         )
     except Exception:
         db.rollback()
         logger.exception("Failed to record helper tool usage for %s", tool_name)
 
 
-def list_recent_tool_usage(db: Session, *, user: User, limit: int = 20) -> list[ToolUsageLogRead]:
+def list_recent_tool_usage(
+    db: Session,
+    *,
+    user: User,
+    limit: int = 20,
+    draft_id: int | None = None,
+    advanced_only: bool = False,
+) -> list[ToolUsageLogRead]:
     accessible_brand_ids = (
         select(BrandMembership.brand_id)
         .where(
@@ -114,7 +145,7 @@ def list_recent_tool_usage(db: Session, *, user: User, limit: int = 20) -> list[
         )
         .scalar_subquery()
     )
-    logs = db.scalars(
+    query = (
         select(ToolUsageLog)
         .options(joinedload(ToolUsageLog.actor), joinedload(ToolUsageLog.brand))
         .where(
@@ -126,9 +157,13 @@ def list_recent_tool_usage(db: Session, *, user: User, limit: int = 20) -> list[
                 ),
             )
         )
-        .order_by(ToolUsageLog.created_at.desc())
-        .limit(limit)
-    ).all()
+    )
+    if draft_id is not None:
+        query = query.where(ToolUsageLog.draft_id == draft_id)
+    if advanced_only:
+        query = query.where(ToolUsageLog.tool_name.in_(ADVANCED_HELPER_TOOL_NAMES))
+
+    logs = db.scalars(query.order_by(ToolUsageLog.created_at.desc()).limit(limit)).all()
 
     return [
         ToolUsageLogRead(
@@ -138,6 +173,8 @@ def list_recent_tool_usage(db: Session, *, user: User, limit: int = 20) -> list[
             actor_name=log.actor.full_name if log.actor else None,
             brand_id=log.brand_id,
             brand_name=log.brand.name if log.brand else None,
+            campaign_id=log.campaign_id,
+            draft_id=log.draft_id,
             target_entity_type=log.target_entity_type,
             target_entity_id=log.target_entity_id,
             invocation_source=log.invocation_source,
@@ -145,6 +182,8 @@ def list_recent_tool_usage(db: Session, *, user: User, limit: int = 20) -> list[
             error_detail=log.error_detail,
             request_payload=log.request_payload,
             result_summary=log.result_summary,
+            request_trace=log.request_trace,
+            result_trace=log.result_trace,
             created_at=log.created_at,
         )
         for log in logs
