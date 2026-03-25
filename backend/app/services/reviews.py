@@ -10,6 +10,7 @@ from app.models.user import User
 from app.schemas.content_draft import ContentDraftRead
 from app.schemas.draft_review import DraftReviewCreate, DraftReviewDecision, DraftReviewRead, DraftReviewThreadRead
 from app.services.audit import record_audit_log
+from app.services.campaign_dependencies import assert_draft_stage_dependencies_satisfied
 from app.services.collaboration import create_review_mentions, serialize_mention
 from app.services.drafts import (
     _coerce_status,
@@ -297,6 +298,7 @@ def submit_draft_for_review(
             change_summary="Resubmitted after review feedback",
         )
 
+    assert_draft_stage_dependencies_satisfied(db, draft=draft, target_stage_key=review_stage.key)
     draft.status = review_stage.key
     review = _create_review_entry(
         db,
@@ -347,6 +349,7 @@ def approve_draft(
     if not is_workflow_transition_allowed(workflow, previous_status, approved_stage.key):
         raise ValueError("This workflow does not allow approval from the current review stage.")
 
+    assert_draft_stage_dependencies_satisfied(db, draft=draft, target_stage_key=approved_stage.key)
     draft.status = approved_stage.key
     review = _create_review_entry(
         db,
@@ -404,6 +407,7 @@ def reject_draft(
     if not payload.comment or not payload.comment.strip():
         raise ValueError("A rejection comment is required.")
 
+    assert_draft_stage_dependencies_satisfied(db, draft=draft, target_stage_key=changes_requested_stage.key)
     draft.status = changes_requested_stage.key
     review = _create_review_entry(
         db,

@@ -7,6 +7,7 @@ from app.models.user import User
 from app.schemas.assignment import AssignmentCreate, AssignmentRead
 from app.schemas.campaign import CampaignCreate, CampaignRead, CampaignUpdate
 from app.schemas.campaign_asset import CampaignAssetCreate, CampaignAssetRead, CampaignAssetUpdate
+from app.schemas.campaign_dependency import CampaignDependencyCreate, CampaignDependencyRead
 from app.schemas.campaign_milestone import CampaignMilestoneRead, CampaignMilestoneUpdate
 from app.schemas.campaign_workspace import CampaignOverviewRead
 from app.schemas.collaboration_comment import CollaborationCommentCreate, CollaborationCommentRead
@@ -26,6 +27,11 @@ from app.services.campaigns import (
     update_campaign,
 )
 from app.services.campaign_milestones import list_campaign_milestones, update_campaign_milestone
+from app.services.campaign_dependencies import (
+    create_campaign_dependency,
+    delete_campaign_dependency,
+    list_campaign_dependencies,
+)
 from app.services.comments import create_campaign_comment, list_campaign_comments
 
 router = APIRouter()
@@ -103,6 +109,44 @@ def update_campaign_milestone_route(
             payload=payload,
             user=current_user,
         )
+    except Exception as exc:
+        _raise_service_error(exc)
+
+
+@router.get("/{campaign_id}/dependencies", response_model=list[CampaignDependencyRead])
+def read_campaign_dependencies(
+    campaign_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[CampaignDependencyRead]:
+    try:
+        return list_campaign_dependencies(db, campaign_id=campaign_id, user=current_user)
+    except Exception as exc:
+        _raise_service_error(exc)
+
+
+@router.post("/{campaign_id}/dependencies", response_model=list[CampaignDependencyRead], status_code=status.HTTP_201_CREATED)
+def create_campaign_dependency_route(
+    campaign_id: int,
+    payload: CampaignDependencyCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[CampaignDependencyRead]:
+    try:
+        return create_campaign_dependency(db, campaign_id=campaign_id, payload=payload, user=current_user)
+    except Exception as exc:
+        _raise_service_error(exc)
+
+
+@router.delete("/{campaign_id}/dependencies/{dependency_id}", response_model=list[CampaignDependencyRead])
+def delete_campaign_dependency_route(
+    campaign_id: int,
+    dependency_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[CampaignDependencyRead]:
+    try:
+        return delete_campaign_dependency(db, campaign_id=campaign_id, dependency_id=dependency_id, user=current_user)
     except Exception as exc:
         _raise_service_error(exc)
 

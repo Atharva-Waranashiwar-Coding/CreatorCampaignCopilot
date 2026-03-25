@@ -10,6 +10,7 @@ from app.models.brand_membership import BrandMembership
 from app.models.calendar_item import CalendarItem
 from app.models.campaign import Campaign
 from app.models.campaign_asset import CampaignAsset
+from app.models.campaign_dependency import CampaignDependency
 from app.models.campaign_milestone import CampaignMilestone
 from app.models.content_draft import ContentDraft
 from app.models.draft_version import DraftVersion
@@ -25,6 +26,7 @@ from app.schemas.content_draft import ContentDraftRead, DraftWorkflowStageCount
 from app.schemas.draft_version import DraftVersionRead
 from app.services.access import assert_brand_limit_available
 from app.services.audit import record_audit_log
+from app.services.campaign_dependencies import serialize_campaign_dependency
 from app.services.campaign_milestones import ensure_campaign_milestones, serialize_campaign_milestone
 from app.services.draft_workflows import get_brand_draft_workflow, get_workflow_stage_or_raise
 
@@ -136,6 +138,11 @@ def _get_campaign_with_role(db: Session, *, campaign_id: int, user_id: int) -> t
             selectinload(Campaign.project).selectinload(Project.brand),
             selectinload(Campaign.brief),
             selectinload(Campaign.assets).joinedload(CampaignAsset.creator),
+            selectinload(Campaign.dependencies).joinedload(CampaignDependency.creator),
+            selectinload(Campaign.dependencies).joinedload(CampaignDependency.dependent_milestone),
+            selectinload(Campaign.dependencies).joinedload(CampaignDependency.blocker_milestone),
+            selectinload(Campaign.dependencies).joinedload(CampaignDependency.dependent_draft),
+            selectinload(Campaign.dependencies).joinedload(CampaignDependency.blocker_draft),
             selectinload(Campaign.milestones).joinedload(CampaignMilestone.completed_by),
             selectinload(Campaign.calendar_items).joinedload(CalendarItem.creator),
             selectinload(Campaign.calendar_items).joinedload(CalendarItem.draft),
@@ -301,6 +308,7 @@ def get_campaign_overview(db: Session, *, campaign_id: int, user: User) -> Campa
         drafts=[_serialize_draft_for_campaign(draft) for draft in ordered_drafts],
         assets=[_serialize_asset(asset) for asset in campaign.assets],
         milestones=[serialize_campaign_milestone(milestone) for milestone in campaign.milestones],
+        dependencies=[serialize_campaign_dependency(dependency, workflow=workflow) for dependency in campaign.dependencies],
         recent_versions=[_serialize_draft_version(version) for version in recent_versions],
         schedule=[_serialize_calendar_item(item) for item in campaign.calendar_items],
         status_breakdown=[

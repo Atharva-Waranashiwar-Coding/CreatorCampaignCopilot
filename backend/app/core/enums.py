@@ -55,6 +55,11 @@ class CampaignMilestoneKey(StrEnum):
     CAMPAIGN_COMPLETED = "campaign_completed"
 
 
+class CampaignDependencyNodeType(StrEnum):
+    CAMPAIGN_MILESTONE = "campaign_milestone"
+    DRAFT_STAGE = "draft_stage"
+
+
 class DraftReviewAction(StrEnum):
     COMMENTED = "commented"
     SUBMITTED = "submitted"

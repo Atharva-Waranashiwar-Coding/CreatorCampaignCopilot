@@ -14,6 +14,7 @@ from app.models.project import Project
 from app.models.user import User
 from app.schemas.campaign_milestone import CampaignMilestoneRead, CampaignMilestoneUpdate
 from app.services.audit import record_audit_log
+from app.services.campaign_dependencies import assert_milestone_dependencies_satisfied
 
 DEFAULT_CAMPAIGN_MILESTONES: list[dict[str, object]] = [
     {
@@ -123,6 +124,7 @@ def update_campaign_milestone(
 
     if "is_complete" in data and data["is_complete"] is not None:
         if data["is_complete"]:
+            assert_milestone_dependencies_satisfied(db, milestone=milestone)
             milestone.completed_at = datetime.now(UTC)
             milestone.completed_by_user_id = user.id
         else:

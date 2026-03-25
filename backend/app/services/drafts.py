@@ -18,6 +18,7 @@ from app.schemas.content_draft import ContentDraftCreate, ContentDraftRead, Cont
 from app.schemas.draft_version import DraftVersionRead
 from app.services.access import assert_brand_limit_available
 from app.services.audit import record_audit_log
+from app.services.campaign_dependencies import assert_draft_stage_dependencies_satisfied
 from app.services.draft_workflows import (
     get_brand_draft_workflow,
     get_workflow_stage_or_raise,
@@ -402,6 +403,7 @@ def update_draft(db: Session, *, draft_id: int, payload: ContentDraftUpdate, use
     if "status" in data and data["status"] is not None:
         next_status = str(data.pop("status"))
         _validate_editorial_status_transition(draft=draft, next_status=next_status)
+        assert_draft_stage_dependencies_satisfied(db, draft=draft, target_stage_key=next_status)
         if next_status != previous_status:
             changed_fields.append("status")
             draft_changes["status"] = next_status
