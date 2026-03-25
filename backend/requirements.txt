@@ -2,6 +2,7 @@ alembic==1.14.0
 bcrypt==4.0.1
 email-validator==2.2.0
 fastapi==0.115.6
+fastapi-mcp==0.4.0
 pydantic-settings==2.7.0
 psycopg[binary]==3.2.3
 python-jose[cryptography]==3.3.0
