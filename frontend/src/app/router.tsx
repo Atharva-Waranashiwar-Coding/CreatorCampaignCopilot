@@ -10,6 +10,7 @@ import { DashboardPage } from "../pages/dashboard-page";
 import { DraftDetailPage } from "../pages/draft-detail-page";
 import { DraftsPage } from "../pages/drafts-page";
 import { BrandsPage } from "../pages/brands-page";
+import { CalendarPage } from "../pages/calendar-page";
 import { CampaignOverviewPage } from "../pages/campaign-overview-page";
 import { CampaignsPage } from "../pages/campaigns-page";
 import { LoginPage } from "../pages/login-page";
@@ -115,6 +116,7 @@ export function AppRouter() {
         <Route path="/projects" element={<ProjectsPage />} />
         <Route path="/campaigns" element={<CampaignsPage />} />
         <Route path="/campaigns/:campaignId" element={<CampaignOverviewPage />} />
+        <Route path="/calendar" element={<CalendarPage />} />
         <Route path="/drafts" element={<DraftsPage />} />
         <Route path="/drafts/:draftId" element={<DraftDetailPage />} />
         <Route path="/reviews" element={<ReviewQueuePage />} />
