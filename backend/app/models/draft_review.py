@@ -46,3 +46,8 @@ class DraftReview(Base):
 
     draft: Mapped["ContentDraft"] = relationship(back_populates="reviews")
     actor: Mapped["User"] = relationship(back_populates="draft_reviews", foreign_keys=[actor_user_id])
+    mentions: Mapped[list["Mention"]] = relationship(
+        back_populates="draft_review",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )

@@ -55,6 +55,29 @@ class Brand(TimestampMixin, Base):
         lazy="selectin",
         order_by="ContentTemplate.updated_at.desc()",
     )
+    collaboration_comments: Mapped[list["CollaborationComment"]] = relationship(
+        back_populates="brand",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+        order_by="CollaborationComment.created_at.asc()",
+    )
+    mentions: Mapped[list["Mention"]] = relationship(
+        back_populates="brand",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+    assignments: Mapped[list["Assignment"]] = relationship(
+        back_populates="brand",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+        order_by="Assignment.created_at.desc()",
+    )
+    notifications: Mapped[list["Notification"]] = relationship(
+        back_populates="brand",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+        order_by="Notification.created_at.desc()",
+    )
     tool_usage_logs: Mapped[list["ToolUsageLog"]] = relationship(
         back_populates="brand",
         cascade="all, delete-orphan",

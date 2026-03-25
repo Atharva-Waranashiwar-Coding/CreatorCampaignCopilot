@@ -6,6 +6,7 @@ import { AppShell } from "../components/layout/app-shell";
 import { Card } from "../components/ui/card";
 import { getCurrentUser } from "../features/auth/auth-api";
 import { useAuthStore } from "../features/auth/auth-store";
+import { apiRequest } from "../lib/api";
 import { DashboardPage } from "../pages/dashboard-page";
 import { DraftDetailPage } from "../pages/draft-detail-page";
 import { DraftsPage } from "../pages/drafts-page";
@@ -16,6 +17,7 @@ import { CampaignOverviewPage } from "../pages/campaign-overview-page";
 import { CampaignsPage } from "../pages/campaigns-page";
 import { HelperToolsPage } from "../pages/helper-tools-page";
 import { LoginPage } from "../pages/login-page";
+import { NotificationsPage } from "../pages/notifications-page";
 import { ProjectsPage } from "../pages/projects-page";
 import { ReviewQueuePage } from "../pages/review-queue-page";
 import { TemplatesPage } from "../pages/templates-page";
@@ -33,6 +35,12 @@ function ProtectedLayout() {
     queryFn: () => getCurrentUser(token!),
     enabled: hydrated && Boolean(token),
     retry: false,
+  });
+
+  const notificationSummaryQuery = useQuery({
+    queryKey: ["notifications", "summary"],
+    queryFn: () => apiRequest<{ unread_count: number }>("/notifications/summary", {}, token!),
+    enabled: hydrated && Boolean(token),
   });
 
   useEffect(() => {
@@ -61,6 +69,7 @@ function ProtectedLayout() {
 
   return (
     <AppShell
+      notificationUnreadCount={notificationSummaryQuery.data?.unread_count ?? 0}
       userName={user?.full_name ?? meQuery.data?.full_name ?? "Campaign operator"}
       userEmail={user?.email ?? meQuery.data?.email ?? ""}
       onLogout={clearAuth}
@@ -115,6 +124,7 @@ export function AppRouter() {
       <Route path="/login" element={<AuthRedirect />} />
       <Route element={<ProtectedLayout />}>
         <Route path="/" element={<DashboardPage />} />
+        <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/brands" element={<BrandsPage />} />
         <Route path="/projects" element={<ProjectsPage />} />
         <Route path="/campaigns" element={<CampaignsPage />} />

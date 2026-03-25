@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 
+import { AssignmentPanel } from "../components/collaboration/assignment-panel";
+import { ThreadedCommentsCard } from "../components/collaboration/threaded-comments-card";
 import { PageHeader } from "../components/shared/page-header";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
@@ -15,13 +17,17 @@ import { useAuthStore } from "../features/auth/auth-store";
 import { ApiError, apiRequest } from "../lib/api";
 import { formatActionLabel, formatDate, formatDateTime, formatStatusLabel } from "../lib/format";
 import { queryClient } from "../lib/query-client";
-import type { CampaignAsset, CampaignOverview, DraftStatus } from "../lib/types";
+import type {
+  Assignment,
+  AuditLog,
+  CampaignAsset,
+  CampaignOverview,
+  CollaborationComment,
+  DraftStatus,
+  Membership,
+} from "../lib/types";
 
-const draftStatuses: DraftStatus[] = [
-  "idea",
-  "draft",
-  "in_review",
-];
+const draftStatuses: DraftStatus[] = ["idea", "draft", "in_review"];
 
 type BriefFormState = {
   key_message: string;
@@ -82,6 +88,7 @@ const emptyAssetForm: AssetFormState = {
 export function CampaignOverviewPage() {
   const { campaignId } = useParams();
   const token = useAuthStore((state) => state.token);
+  const currentUser = useAuthStore((state) => state.user);
   const [briefForm, setBriefForm] = useState<BriefFormState>(emptyBriefForm);
   const [draftForm, setDraftForm] = useState<DraftFormState>(emptyDraftForm);
   const [assetForm, setAssetForm] = useState<AssetFormState>(emptyAssetForm);
@@ -91,6 +98,24 @@ export function CampaignOverviewPage() {
     queryKey: ["campaign-overview", campaignId],
     queryFn: () => apiRequest<CampaignOverview>(`/campaigns/${campaignId}/overview`, {}, token),
     enabled: Boolean(campaignId),
+  });
+
+  const commentsQuery = useQuery({
+    queryKey: ["campaign-comments", campaignId],
+    queryFn: () => apiRequest<CollaborationComment[]>(`/campaigns/${campaignId}/comments`, {}, token),
+    enabled: Boolean(campaignId),
+  });
+
+  const assignmentsQuery = useQuery({
+    queryKey: ["campaign-assignments", campaignId],
+    queryFn: () => apiRequest<Assignment[]>(`/campaigns/${campaignId}/assignments`, {}, token),
+    enabled: Boolean(campaignId),
+  });
+
+  const membershipsQuery = useQuery({
+    queryKey: ["brand-memberships", overviewQuery.data?.campaign.brand_id],
+    queryFn: () => apiRequest<Membership[]>(`/brands/${overviewQuery.data?.campaign.brand_id}/memberships`, {}, token),
+    enabled: Boolean(overviewQuery.data?.campaign.brand_id),
   });
 
   const overview = overviewQuery.data;
@@ -114,14 +139,18 @@ export function CampaignOverviewPage() {
 
   const createOrUpdateBriefMutation = useMutation({
     mutationFn: () =>
-      apiRequest(`/campaigns/${campaignId}/brief`, {
-        method: "PUT",
-        body: JSON.stringify({
-          ...briefForm,
-          channels: splitList(briefForm.channels),
-          themes: splitList(briefForm.themes),
-        }),
-      }, token),
+      apiRequest(
+        `/campaigns/${campaignId}/brief`,
+        {
+          method: "PUT",
+          body: JSON.stringify({
+            ...briefForm,
+            channels: splitList(briefForm.channels),
+            themes: splitList(briefForm.themes),
+          }),
+        },
+        token,
+      ),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["campaign-overview", campaignId] });
       queryClient.invalidateQueries({ queryKey: ["campaigns"] });
@@ -142,18 +171,22 @@ export function CampaignOverviewPage() {
 
   const createDraftMutation = useMutation({
     mutationFn: () =>
-      apiRequest(`/drafts`, {
-        method: "POST",
-        body: JSON.stringify({
-          campaign_id: Number(campaignId),
-          title: draftForm.title,
-          platform: draftForm.platform,
-          content_type: draftForm.content_type,
-          content_body: draftForm.content_body || null,
-          status: draftForm.status,
-          planned_publish_at: draftForm.planned_publish_at || null,
-        }),
-      }, token),
+      apiRequest(
+        `/drafts`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            campaign_id: Number(campaignId),
+            title: draftForm.title,
+            platform: draftForm.platform,
+            content_type: draftForm.content_type,
+            content_body: draftForm.content_body || null,
+            status: draftForm.status,
+            planned_publish_at: draftForm.planned_publish_at || null,
+          }),
+        },
+        token,
+      ),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["campaign-overview", campaignId] });
       queryClient.invalidateQueries({ queryKey: ["drafts"] });
@@ -165,18 +198,22 @@ export function CampaignOverviewPage() {
 
   const saveAssetMutation = useMutation({
     mutationFn: () =>
-      apiRequest(`/campaigns/${campaignId}/assets${editingAssetId ? `/${editingAssetId}` : ""}`, {
-        method: editingAssetId ? "PATCH" : "POST",
-        body: JSON.stringify({
-          name: assetForm.name,
-          asset_type: assetForm.asset_type,
-          file_url: assetForm.file_url,
-          thumbnail_url: assetForm.thumbnail_url || null,
-          mime_type: assetForm.mime_type || null,
-          file_size_bytes: assetForm.file_size_bytes ? Number(assetForm.file_size_bytes) : null,
-          notes: assetForm.notes || null,
-        }),
-      }, token),
+      apiRequest(
+        `/campaigns/${campaignId}/assets${editingAssetId ? `/${editingAssetId}` : ""}`,
+        {
+          method: editingAssetId ? "PATCH" : "POST",
+          body: JSON.stringify({
+            name: assetForm.name,
+            asset_type: assetForm.asset_type,
+            file_url: assetForm.file_url,
+            thumbnail_url: assetForm.thumbnail_url || null,
+            mime_type: assetForm.mime_type || null,
+            file_size_bytes: assetForm.file_size_bytes ? Number(assetForm.file_size_bytes) : null,
+            notes: assetForm.notes || null,
+          }),
+        },
+        token,
+      ),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["campaign-overview", campaignId] });
       setEditingAssetId(null);
@@ -198,6 +235,60 @@ export function CampaignOverviewPage() {
     },
   });
 
+  const commentMutation = useMutation({
+    mutationFn: (payload: { body: string; parent_comment_id: number | null }) =>
+      apiRequest<CollaborationComment[]>(
+        `/campaigns/${campaignId}/comments`,
+        {
+          method: "POST",
+          body: JSON.stringify(payload),
+        },
+        token,
+      ),
+    onSuccess: (comments) => {
+      queryClient.setQueryData(["campaign-comments", campaignId], comments);
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    },
+  });
+
+  const createAssignmentMutation = useMutation({
+    mutationFn: (payload: {
+      assignee_user_id: number;
+      note: string | null;
+      due_at: string | null;
+    }) =>
+      apiRequest<Assignment[]>(
+        `/campaigns/${campaignId}/assignments`,
+        {
+          method: "POST",
+          body: JSON.stringify(payload),
+        },
+        token,
+      ),
+    onSuccess: (assignments) => {
+      queryClient.setQueryData(["campaign-assignments", campaignId], assignments);
+      queryClient.invalidateQueries({ queryKey: ["assignments", "mine"] });
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    },
+  });
+
+  const completeAssignmentMutation = useMutation({
+    mutationFn: (assignmentId: number) =>
+      apiRequest<Assignment>(
+        `/assignments/${assignmentId}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({ status: "completed" }),
+        },
+        token,
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["campaign-assignments", campaignId] });
+      queryClient.invalidateQueries({ queryKey: ["assignments", "mine"] });
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    },
+  });
+
   if (overviewQuery.isLoading) {
     return <LoadingState label="Loading campaign workspace" />;
   }
@@ -215,7 +306,10 @@ export function CampaignOverviewPage() {
         actions={
           <div className="flex flex-wrap gap-3">
             <Badge tone={campaign.status === "active" ? "success" : "muted"}>{campaign.status}</Badge>
-            <Link className="inline-flex items-center rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground" to="/campaigns">
+            <Link
+              className="inline-flex items-center rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+              to="/campaigns"
+            >
               Back to campaigns
             </Link>
           </div>
@@ -380,9 +474,7 @@ export function CampaignOverviewPage() {
                 <Input
                   type="datetime-local"
                   value={draftForm.planned_publish_at}
-                  onChange={(event) =>
-                    setDraftForm((current) => ({ ...current, planned_publish_at: event.target.value }))
-                  }
+                  onChange={(event) => setDraftForm((current) => ({ ...current, planned_publish_at: event.target.value }))}
                 />
               </Field>
               <Field label="Draft body">
@@ -593,6 +685,40 @@ export function CampaignOverviewPage() {
         </Card>
       </div>
 
+      <div className="mt-8 grid gap-6 xl:grid-cols-[1.02fr_0.98fr]">
+        <ThreadedCommentsCard
+          comments={commentsQuery.data ?? []}
+          description="Keep campaign-level planning and coordination in a threaded discussion that sits beside the activity feed."
+          emptyMessage="No campaign discussion yet. Start the first thread here."
+          error={commentMutation.error || commentsQuery.error}
+          eyebrow="Discussion"
+          isLoading={commentsQuery.isLoading}
+          isSubmitting={commentMutation.isPending}
+          onCreate={(payload) => commentMutation.mutateAsync(payload)}
+          placeholder="Add a campaign comment. Use @email for mentions and reply inline to keep planning threads organized."
+          title="Campaign discussion"
+        />
+
+        <AssignmentPanel
+          assignmentTypeOptions={["campaign"]}
+          assignments={assignmentsQuery.data ?? []}
+          currentUserId={currentUser?.id}
+          defaultAssignmentType="campaign"
+          description="Assign campaign-level ownership without leaving the workspace."
+          emptyMessage="Campaign assignments will appear here when work is delegated."
+          error={createAssignmentMutation.error || completeAssignmentMutation.error || assignmentsQuery.error}
+          eyebrow="Assignments"
+          isCompletingId={completeAssignmentMutation.variables ?? null}
+          isCreating={createAssignmentMutation.isPending}
+          isLoading={assignmentsQuery.isLoading}
+          memberError={membershipsQuery.error}
+          members={membershipsQuery.data ?? []}
+          onComplete={(assignmentId) => completeAssignmentMutation.mutate(assignmentId)}
+          onCreate={(payload) => createAssignmentMutation.mutateAsync(payload)}
+          title="Campaign ownership"
+        />
+      </div>
+
       <div className="mt-8 grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
         <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
           <div className="flex items-center justify-between gap-4">
@@ -682,29 +808,35 @@ export function CampaignOverviewPage() {
             <div className="flex items-center justify-between gap-4">
               <div>
                 <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Campaign activity</p>
-                <h2 className="mt-2 text-2xl font-semibold tracking-tight">Timeline</h2>
+                <h2 className="mt-2 text-2xl font-semibold tracking-tight">Collaboration feed</h2>
               </div>
               <Badge tone="muted">{overview.activity_timeline.length} events</Badge>
             </div>
 
             <div className="mt-5 space-y-3">
               {overview.activity_timeline.length ? (
-                overview.activity_timeline.map((item) => (
-                  <div key={item.id} className="rounded-[1.25rem] border border-border bg-white/80 px-4 py-4">
-                    <div className="flex flex-wrap items-center gap-3">
-                      <Badge>{item.entity_type}</Badge>
-                      <p className="text-sm font-medium text-foreground">{formatActionLabel(item.action)}</p>
-                    </div>
-                    <p className="mt-2 text-sm text-muted-foreground">
-                      {item.actor_name ?? "Unknown user"} · {formatDateTime(item.created_at)}
-                    </p>
-                    {"version_number" in item.metadata ? (
-                      <p className="mt-3 text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                        Version {String(item.metadata.version_number)}
+                overview.activity_timeline.map((item) => {
+                  const activity = describeActivity(item);
+                  const href = activityHref(item);
+
+                  return (
+                    <div key={item.id} className="rounded-[1.25rem] border border-border bg-white/80 px-4 py-4">
+                      <div className="flex flex-wrap items-center gap-3">
+                        <Badge>{item.entity_type}</Badge>
+                        <p className="text-sm font-medium text-foreground">{activity.title}</p>
+                      </div>
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        {item.actor_name ?? "Unknown user"} · {formatDateTime(item.created_at)}
                       </p>
-                    ) : null}
-                  </div>
-                ))
+                      {activity.detail ? <p className="mt-3 text-sm leading-6 text-foreground">{activity.detail}</p> : null}
+                      {href ? (
+                        <Link className="mt-4 inline-flex text-sm font-medium text-primary" to={href}>
+                          Open linked item
+                        </Link>
+                      ) : null}
+                    </div>
+                  );
+                })
               ) : (
                 <p className="rounded-[1.25rem] border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
                   Campaign activity will appear here once drafts begin moving through review.
@@ -783,4 +915,88 @@ function formatFileSize(value: number) {
     return `${(value / 1024).toFixed(1)} KB`;
   }
   return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function describeActivity(item: AuditLog) {
+  switch (item.action) {
+    case "campaign.comment_created":
+      return {
+        title: "Campaign discussion updated",
+        detail: metadataNumber(item.metadata, "parent_comment_id")
+          ? "A reply was added in the campaign thread."
+          : "A new campaign thread was started.",
+      };
+    case "draft.comment_created":
+      return {
+        title: "Draft discussion updated",
+        detail: `Draft #${metadataNumber(item.metadata, "draft_id") ?? item.entity_id} received a threaded comment.`,
+      };
+    case "draft.submitted_for_review":
+      return {
+        title: "Draft submitted for review",
+        detail: `Draft #${metadataNumber(item.metadata, "draft_id") ?? item.entity_id} moved into review.`,
+      };
+    case "draft.review_commented":
+      return {
+        title: "Review note added",
+        detail: `Draft #${metadataNumber(item.metadata, "draft_id") ?? item.entity_id} received reviewer feedback.`,
+      };
+    case "draft.review_approved":
+      return {
+        title: "Draft approved",
+        detail: `Draft #${metadataNumber(item.metadata, "draft_id") ?? item.entity_id} was approved.`,
+      };
+    case "draft.review_rejected":
+      return {
+        title: "Draft rejected",
+        detail: `Draft #${metadataNumber(item.metadata, "draft_id") ?? item.entity_id} was rejected and sent back for edits.`,
+      };
+    case "draft.resubmitted_for_review":
+      return {
+        title: "Draft resubmitted",
+        detail: `Version ${metadataNumber(item.metadata, "version_number") ?? "next"} returned to review.`,
+      };
+    case "assignment.created":
+      return {
+        title: "Assignment created",
+        detail: `${formatStatusLabel(String(item.metadata.assignment_type ?? "assignment"))} ownership was added.`,
+      };
+    case "assignment.updated":
+      return {
+        title: "Assignment updated",
+        detail: `${formatStatusLabel(String(item.metadata.assignment_type ?? "assignment"))} ownership changed status.`,
+      };
+    default:
+      return {
+        title: formatActionLabel(item.action),
+        detail: null,
+      };
+  }
+}
+
+function activityHref(item: AuditLog) {
+  const draftId = metadataNumber(item.metadata, "draft_id");
+  const campaignId = metadataNumber(item.metadata, "campaign_id");
+
+  if (draftId) {
+    return `/drafts/${draftId}`;
+  }
+  if (campaignId) {
+    return `/campaigns/${campaignId}`;
+  }
+  if (item.entity_type === "campaign") {
+    return `/campaigns/${item.entity_id}`;
+  }
+  return null;
+}
+
+function metadataNumber(metadata: Record<string, unknown>, key: string) {
+  const value = metadata[key];
+  if (typeof value === "number") {
+    return value;
+  }
+  if (typeof value === "string" && value) {
+    return Number(value);
+  }
+  return null;
 }

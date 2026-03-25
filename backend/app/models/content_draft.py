@@ -53,3 +53,15 @@ class ContentDraft(TimestampMixin, Base):
         lazy="selectin",
         uselist=False,
     )
+    comments: Mapped[list["CollaborationComment"]] = relationship(
+        back_populates="draft",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+        order_by="CollaborationComment.created_at.asc()",
+    )
+    assignments: Mapped[list["Assignment"]] = relationship(
+        back_populates="draft",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+        order_by="Assignment.created_at.desc()",
+    )

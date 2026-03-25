@@ -45,6 +45,32 @@ class DraftReviewAction(StrEnum):
     RESUBMITTED = "resubmitted"
 
 
+class CommentEntityType(StrEnum):
+    CAMPAIGN = "campaign"
+    DRAFT = "draft"
+
+
+class AssignmentEntityType(StrEnum):
+    CAMPAIGN = "campaign"
+    DRAFT = "draft"
+    REVIEW_TASK = "review_task"
+
+
+class AssignmentStatus(StrEnum):
+    OPEN = "open"
+    COMPLETED = "completed"
+    CANCELED = "canceled"
+
+
+class NotificationType(StrEnum):
+    MENTION = "mention"
+    REVIEW_REQUESTED = "review_requested"
+    DRAFT_APPROVED = "draft_approved"
+    DRAFT_REJECTED = "draft_rejected"
+    ASSIGNMENT_CREATED = "assignment_created"
+    DUE_SOON = "due_soon"
+
+
 class PlanInterval(StrEnum):
     MONTHLY = "monthly"
     YEARLY = "yearly"

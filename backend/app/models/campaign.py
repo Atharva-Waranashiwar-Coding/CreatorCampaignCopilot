@@ -53,3 +53,15 @@ class Campaign(TimestampMixin, Base):
         lazy="selectin",
         order_by="CalendarItem.scheduled_for.asc()",
     )
+    comments: Mapped[list["CollaborationComment"]] = relationship(
+        back_populates="campaign",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+        order_by="CollaborationComment.created_at.asc()",
+    )
+    assignments: Mapped[list["Assignment"]] = relationship(
+        back_populates="campaign",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+        order_by="Assignment.created_at.desc()",
+    )

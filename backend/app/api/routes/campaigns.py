@@ -4,9 +4,12 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.models.user import User
+from app.schemas.assignment import AssignmentCreate, AssignmentRead
 from app.schemas.campaign import CampaignCreate, CampaignRead, CampaignUpdate
 from app.schemas.campaign_asset import CampaignAssetCreate, CampaignAssetRead, CampaignAssetUpdate
 from app.schemas.campaign_workspace import CampaignOverviewRead
+from app.schemas.collaboration_comment import CollaborationCommentCreate, CollaborationCommentRead
+from app.services.assignments import create_campaign_assignment, list_campaign_assignments
 from app.services.assets import (
     create_campaign_asset,
     delete_campaign_asset,
@@ -21,6 +24,7 @@ from app.services.campaigns import (
     list_campaigns,
     update_campaign,
 )
+from app.services.comments import create_campaign_comment, list_campaign_comments
 
 router = APIRouter()
 
@@ -65,6 +69,56 @@ def read_campaign_overview(
 ) -> CampaignOverviewRead:
     try:
         return get_campaign_overview(db, campaign_id=campaign_id, user=current_user)
+    except Exception as exc:
+        _raise_service_error(exc)
+
+
+@router.get("/{campaign_id}/comments", response_model=list[CollaborationCommentRead])
+def read_campaign_comments(
+    campaign_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[CollaborationCommentRead]:
+    try:
+        return list_campaign_comments(db, campaign_id=campaign_id, user=current_user)
+    except Exception as exc:
+        _raise_service_error(exc)
+
+
+@router.post("/{campaign_id}/comments", response_model=list[CollaborationCommentRead], status_code=status.HTTP_201_CREATED)
+def create_campaign_comment_route(
+    campaign_id: int,
+    payload: CollaborationCommentCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[CollaborationCommentRead]:
+    try:
+        return create_campaign_comment(db, campaign_id=campaign_id, payload=payload, user=current_user)
+    except Exception as exc:
+        _raise_service_error(exc)
+
+
+@router.get("/{campaign_id}/assignments", response_model=list[AssignmentRead])
+def read_campaign_assignments(
+    campaign_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[AssignmentRead]:
+    try:
+        return list_campaign_assignments(db, campaign_id=campaign_id, user=current_user)
+    except Exception as exc:
+        _raise_service_error(exc)
+
+
+@router.post("/{campaign_id}/assignments", response_model=list[AssignmentRead], status_code=status.HTTP_201_CREATED)
+def create_campaign_assignment_route(
+    campaign_id: int,
+    payload: AssignmentCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[AssignmentRead]:
+    try:
+        return create_campaign_assignment(db, campaign_id=campaign_id, payload=payload, user=current_user)
     except Exception as exc:
         _raise_service_error(exc)
 
