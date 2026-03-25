@@ -98,7 +98,7 @@ function NotFound() {
       <p className="mt-3 text-muted-foreground">
         The requested page is outside the current phase scope.
       </p>
-      <NavLink className="mt-6 inline-flex text-sm font-medium text-primary" to="/">
+      <NavLink className="mt-6 inline-flex rounded-[1rem] border border-primary/10 bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground" to="/">
         Return to dashboard
       </NavLink>
     </Card>
@@ -110,7 +110,7 @@ function LoadingCard({ label }: { label: string }) {
     <div className="flex min-h-screen items-center justify-center px-4">
       <Card className="w-full max-w-md border-white/70 bg-white/80 p-8 text-center shadow-xl shadow-slate-900/5">
         <p className="text-sm uppercase tracking-[0.3em] text-muted-foreground">{label}</p>
-        <div className="mt-6 h-2 overflow-hidden rounded-full bg-muted">
+        <div className="mt-6 h-2.5 overflow-hidden rounded-full bg-muted">
           <div className="h-full w-1/2 animate-pulse rounded-full bg-primary" />
         </div>
       </Card>

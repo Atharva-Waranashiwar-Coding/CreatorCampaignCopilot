@@ -7,17 +7,17 @@ type BadgeProps = HTMLAttributes<HTMLSpanElement> & {
 };
 
 const tones: Record<NonNullable<BadgeProps["tone"]>, string> = {
-  default: "bg-primary/10 text-primary",
-  success: "bg-emerald-100 text-emerald-700",
-  muted: "bg-slate-200 text-slate-700",
-  warning: "bg-amber-100 text-amber-700",
+  default: "border-primary/20 bg-primary text-primary-foreground shadow-primary/20",
+  success: "border-emerald-200 bg-emerald-600 text-white shadow-emerald-600/20",
+  muted: "border-slate-300 bg-white text-slate-700 shadow-slate-300/30",
+  warning: "border-amber-300 bg-amber-400 text-amber-950 shadow-amber-400/25",
 };
 
 export function Badge({ className, tone = "default", ...props }: BadgeProps) {
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium",
+        "inline-flex items-center rounded-full border px-3 py-1 text-[0.72rem] font-semibold leading-none shadow-sm",
         tones[tone],
         className,
       )}

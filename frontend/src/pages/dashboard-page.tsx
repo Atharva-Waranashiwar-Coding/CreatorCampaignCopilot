@@ -65,11 +65,11 @@ export function DashboardPage() {
     (healthReport?.summary.at_risk_count ?? 0) + (healthReport?.summary.critical_count ?? 0);
 
   return (
-    <div>
+    <div className="min-w-0">
       <PageHeader
         eyebrow="Dashboard"
-        title="Campaign operations with plan-aware visibility"
-        description="Track campaign health, team workload, approval bottlenecks, content mix, and scheduled delivery from a single operational view."
+        title="Campaign operating system"
+        description="See health, workload, approvals, and launch pressure without opening every workspace."
         actions={(
           <Select
             className="min-w-[220px]"

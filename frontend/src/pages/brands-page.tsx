@@ -210,11 +210,11 @@ export function BrandsPage() {
   });
 
   return (
-    <div>
+    <div className="min-w-0">
       <PageHeader
         eyebrow="Brands"
-        title="Brand workspaces and memberships"
-        description="Create the top-level workspace, manage foundational brand metadata, and see the invite-ready membership structure."
+        title="Brands and roles"
+        description="Set workspace rules, invite people, and shape each brand's workflow without digging through settings."
       />
 
       <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
