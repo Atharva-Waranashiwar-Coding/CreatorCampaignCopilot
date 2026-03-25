@@ -6,7 +6,7 @@ import { Badge } from "../components/ui/badge";
 import { Card } from "../components/ui/card";
 import { useAuthStore } from "../features/auth/auth-store";
 import { apiRequest } from "../lib/api";
-import { formatDateTime } from "../lib/format";
+import { formatActionLabel, formatDateTime } from "../lib/format";
 import type { DashboardSummary } from "../lib/types";
 
 export function DashboardPage() {
@@ -24,7 +24,7 @@ export function DashboardPage() {
       <PageHeader
         eyebrow="Dashboard"
         title="Campaign operations at a glance"
-        description="Track the core Phase 1 entities from one workspace shell before briefs, drafts, and reviews are layered on."
+        description="Track active campaigns, the review lane, and approval momentum from the same workspace shell."
       />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -54,9 +54,14 @@ export function DashboardPage() {
           value={summary?.draft_count ?? 0}
         />
         <MetricCard
-          hint="Drafts currently waiting in the review lane."
-          label="In review"
-          value={summary?.in_review_draft_count ?? 0}
+          hint="Drafts currently waiting for reviewer action."
+          label="Pending review"
+          value={summary?.pending_review_count ?? 0}
+        />
+        <MetricCard
+          hint="Drafts that cleared review and are ready for downstream ops."
+          label="Approved drafts"
+          value={summary?.approved_draft_count ?? 0}
         />
       </div>
 
@@ -80,7 +85,7 @@ export function DashboardPage() {
               >
                 <div className="flex flex-wrap items-center gap-3">
                   <Badge>{item.entity_type}</Badge>
-                  <p className="text-sm font-medium text-foreground">{item.action}</p>
+                  <p className="text-sm font-medium text-foreground">{formatActionLabel(item.action)}</p>
                 </div>
                 <p className="mt-2 text-sm text-muted-foreground">
                   {item.actor_name ?? "Unknown user"} · {formatDateTime(item.created_at)}
@@ -90,7 +95,7 @@ export function DashboardPage() {
           </div>
         ) : (
           <p className="mt-6 text-sm text-muted-foreground">
-            Activity will appear here once brands, projects, campaigns, and membership invites are created.
+            Activity will appear here once campaigns, drafts, and review actions start moving through the workspace.
           </p>
         )}
       </Card>

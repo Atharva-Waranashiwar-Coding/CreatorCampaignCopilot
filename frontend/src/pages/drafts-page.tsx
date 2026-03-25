@@ -9,7 +9,7 @@ import { Input } from "../components/ui/input";
 import { Select } from "../components/ui/select";
 import { useAuthStore } from "../features/auth/auth-store";
 import { apiRequest } from "../lib/api";
-import { formatDateTime, formatStatusLabel } from "../lib/format";
+import { formatActionLabel, formatDateTime, formatStatusLabel } from "../lib/format";
 import type { Campaign, ContentDraft, DraftStatus } from "../lib/types";
 
 const statusOptions: DraftStatus[] = [
@@ -69,6 +69,11 @@ export function DraftsPage() {
         eyebrow="Drafts"
         title="All campaign drafts"
         description="Browse the working copy across campaigns, then narrow the list by campaign, platform, status, or free-text search."
+        actions={(
+          <Link className="inline-flex items-center rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground" to="/reviews">
+            Open review queue
+          </Link>
+        )}
       />
 
       <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
@@ -123,10 +128,16 @@ export function DraftsPage() {
                   <Badge tone={draft.status === "in_review" ? "warning" : draft.status === "approved" ? "success" : "muted"}>
                     {formatStatusLabel(draft.status)}
                   </Badge>
+                  <Badge tone="muted">{draft.review_count} reviews</Badge>
                 </div>
                 <p className="mt-2 text-sm text-muted-foreground">
                   {draft.brand_name} · {draft.project_name} · {draft.campaign_name}
                 </p>
+                {draft.latest_review_action ? (
+                  <p className="mt-3 text-sm text-muted-foreground">
+                    Latest review: {formatActionLabel(draft.latest_review_action)} · {formatDateTime(draft.latest_reviewed_at)}
+                  </p>
+                ) : null}
                 <p className="mt-3 text-xs uppercase tracking-[0.18em] text-muted-foreground">
                   Updated {formatDateTime(draft.updated_at)}
                 </p>
