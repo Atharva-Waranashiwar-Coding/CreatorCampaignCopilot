@@ -9,6 +9,7 @@ import { useAuthStore } from "../features/auth/auth-store";
 import { DashboardPage } from "../pages/dashboard-page";
 import { DraftDetailPage } from "../pages/draft-detail-page";
 import { DraftsPage } from "../pages/drafts-page";
+import { BillingPage } from "../pages/billing-page";
 import { BrandsPage } from "../pages/brands-page";
 import { CalendarPage } from "../pages/calendar-page";
 import { CampaignOverviewPage } from "../pages/campaign-overview-page";
@@ -16,6 +17,7 @@ import { CampaignsPage } from "../pages/campaigns-page";
 import { LoginPage } from "../pages/login-page";
 import { ProjectsPage } from "../pages/projects-page";
 import { ReviewQueuePage } from "../pages/review-queue-page";
+import { TemplatesPage } from "../pages/templates-page";
 
 function ProtectedLayout() {
   const location = useLocation();
@@ -120,6 +122,8 @@ export function AppRouter() {
         <Route path="/drafts" element={<DraftsPage />} />
         <Route path="/drafts/:draftId" element={<DraftDetailPage />} />
         <Route path="/reviews" element={<ReviewQueuePage />} />
+        <Route path="/templates" element={<TemplatesPage />} />
+        <Route path="/billing" element={<BillingPage />} />
       </Route>
       <Route path="*" element={<NotFound />} />
     </Routes>

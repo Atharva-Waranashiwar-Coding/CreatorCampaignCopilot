@@ -1,6 +1,6 @@
 # Creator Campaign Copilot
 
-Phase 3 foundation for a multi-brand campaign operations workspace.
+Phase 5 workspace for multi-brand campaign operations, templates, analytics, and subscription-aware usage controls.
 
 ## Stack
 
@@ -9,7 +9,7 @@ Phase 3 foundation for a multi-brand campaign operations workspace.
 - Database: PostgreSQL
 - Dev environment: Docker Compose
 
-## Phase 3 scope
+## Phase 5 scope
 
 - Email/password auth scaffold with JWT access tokens
 - Core backend modules for users, brands, memberships, projects, campaigns, and audit logs
@@ -22,7 +22,13 @@ Phase 3 foundation for a multi-brand campaign operations workspace.
 - Draft review model and APIs with reviewer comments
 - Approval and rejection workflow with role checks and editor resubmission loop
 - Campaign workspace overview, review queue, activity timeline, draft detail workflow, and search/filtering
-- Alembic migrations for the initial schema plus Phase 2 and Phase 3 review workflow additions
+- Campaign assets, draft versions, and calendar scheduling
+- Brand plan catalog and subscription state
+- Brand-level usage metering and access checks for members, active campaigns, scheduled work, and templates
+- Brand billing/settings page with plan details, upgrade prompts, and recent plan audit events
+- Content template model and CRUD workflow
+- Dashboard analytics for campaign status, draft pipeline, review activity, and schedule pressure
+- Alembic migrations for Phases 1 through 5
 
 ## Quick start
 
@@ -46,38 +52,50 @@ Phase 3 foundation for a multi-brand campaign operations workspace.
 
 The backend container runs `alembic upgrade head` before starting the FastAPI server.
 
-## Phase 3 workflow
+## Phase 5 workflow
 
 1. Create an account from the login page.
 2. Create a brand workspace.
-3. Create projects inside the brand.
-4. Create campaigns inside a project.
-5. Add or update a campaign brief in the campaign workspace.
-6. Create drafts for the campaign and manage their statuses.
-7. Submit drafts into review from the draft detail page.
-8. Reviewers add comments, approve drafts, or reject them with feedback.
-9. Editors revise rejected drafts and resubmit them for review.
-10. Track campaign activity from the campaign workspace timeline and use the review queue to process pending items.
-11. Filter drafts by campaign, platform, status, or search term.
-12. Invite additional members from the brand page.
+3. Review the starter subscription and usage posture from the billing page.
+4. Create projects inside the brand.
+5. Create campaigns inside a project.
+6. Add or update a campaign brief in the campaign workspace.
+7. Save reusable templates for campaign briefs, draft copy, review notes, or launch copy.
+8. Create drafts for the campaign and manage their statuses.
+9. Submit drafts into review from the draft detail page.
+10. Reviewers add comments, approve drafts, or reject them with feedback.
+11. Editors revise rejected drafts and resubmit them for review.
+12. Track campaign activity from the campaign workspace timeline and use the review queue to process pending items.
+13. Use the dashboard analytics view to monitor campaign status, draft throughput, review actions, and schedule pressure.
+14. Filter drafts by campaign, platform, status, or search term.
+15. Invite additional members from the brand page.
+16. Upgrade or rebalance the brand plan as usage approaches current limits.
 
 ## Backend entities in this phase
 
 - `users`
 - `brands`
 - `brand_memberships`
+- `plans`
+- `brand_subscriptions`
 - `projects`
 - `campaigns`
 - `content_briefs`
 - `content_drafts`
+- `content_templates`
 - `draft_reviews`
+- `draft_versions`
+- `calendar_items`
 - `audit_logs`
 
 ## API areas
 
 - `/api/auth`
 - `/api/dashboard`
+- `/api/dashboard/analytics`
 - `/api/brands`
+- `/api/brands/{brand_id}/billing`
+- `/api/brands/{brand_id}/subscription`
 - `/api/projects`
 - `/api/campaigns`
 - `/api/campaigns/{campaign_id}/overview`
@@ -89,11 +107,15 @@ The backend container runs `alembic upgrade head` before starting the FastAPI se
 - `/api/drafts/{draft_id}/approve`
 - `/api/drafts/{draft_id}/reject`
 - `/api/drafts/{draft_id}/resubmit`
+- `/api/templates`
 
 ## Notes
 
-- Membership invitations are stored without outbound email sending in Phases 1 through 3.
+- Membership invitations are stored without outbound email sending.
 - Owner membership updates and ownership transfer are intentionally deferred.
 - The frontend stores the JWT token locally and restores the session on reload.
 - Each campaign can have one brief and many drafts.
 - Reviewer approvals only operate on drafts already in `in_review`.
+- New brands receive the seeded `starter` plan by default.
+- Plan changes and template actions are recorded in the existing audit log stream.
+- Usage checks are currently enforced for member count, active campaigns, upcoming scheduled items, and template count.

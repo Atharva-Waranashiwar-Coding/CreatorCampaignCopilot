@@ -22,6 +22,7 @@ from app.schemas.campaign_workspace import CampaignOverviewRead
 from app.schemas.content_brief import ContentBriefRead
 from app.schemas.content_draft import ContentDraftRead, DraftStatusCount
 from app.schemas.draft_version import DraftVersionRead
+from app.services.access import assert_brand_limit_available
 from app.services.audit import record_audit_log
 
 
@@ -310,6 +311,14 @@ def create_campaign(db: Session, *, payload: CampaignCreate, user: User) -> Camp
         WORKSPACE_MANAGEMENT_ROLES,
         "You do not have permission to create campaigns.",
     )
+    if payload.status == CampaignStatus.ACTIVE:
+        assert_brand_limit_available(
+            db,
+            brand_id=project.brand_id,
+            user_id=user.id,
+            metric_key="active_campaigns",
+            message="This brand has reached the active campaign limit for its current plan.",
+        )
 
     campaign = Campaign(
         project_id=project.id,
@@ -352,6 +361,15 @@ def update_campaign(db: Session, *, campaign_id: int, payload: CampaignUpdate, u
     end_date = data.get("end_date", campaign.end_date)
     if start_date and end_date and start_date > end_date:
         raise ValueError("Campaign start date must be before the end date.")
+    next_status = data.get("status", campaign.status)
+    if next_status == CampaignStatus.ACTIVE and campaign.status != CampaignStatus.ACTIVE:
+        assert_brand_limit_available(
+            db,
+            brand_id=campaign.project.brand_id,
+            user_id=user.id,
+            metric_key="active_campaigns",
+            message="Moving this campaign to active would exceed the current plan limit.",
+        )
 
     for field, value in data.items():
         setattr(campaign, field, value.strip() if isinstance(value, str) else value)

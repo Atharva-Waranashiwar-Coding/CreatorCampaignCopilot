@@ -1,3 +1,11 @@
+function parseDateValue(value: string) {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return new Date(`${value}T00:00:00`);
+  }
+
+  return new Date(value);
+}
+
 export function formatDateTime(value: string | null | undefined) {
   if (!value) {
     return "Not set";
@@ -6,7 +14,7 @@ export function formatDateTime(value: string | null | undefined) {
   return new Intl.DateTimeFormat("en-US", {
     dateStyle: "medium",
     timeStyle: "short",
-  }).format(new Date(value));
+  }).format(parseDateValue(value));
 }
 
 export function formatDate(value: string | null | undefined) {
@@ -16,7 +24,7 @@ export function formatDate(value: string | null | undefined) {
 
   return new Intl.DateTimeFormat("en-US", {
     dateStyle: "medium",
-  }).format(new Date(value));
+  }).format(parseDateValue(value));
 }
 
 export function formatStatusLabel(value: string) {

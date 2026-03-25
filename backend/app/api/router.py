@@ -9,6 +9,7 @@ from app.api.routes.dashboard import router as dashboard_router
 from app.api.routes.drafts import router as drafts_router
 from app.api.routes.health import router as health_router
 from app.api.routes.projects import router as projects_router
+from app.api.routes.templates import router as templates_router
 
 api_router = APIRouter()
 api_router.include_router(health_router, tags=["health"])
@@ -20,3 +21,4 @@ api_router.include_router(campaigns_router, prefix="/campaigns", tags=["campaign
 api_router.include_router(calendar_items_router, prefix="/calendar-items", tags=["calendar"])
 api_router.include_router(briefs_router, tags=["briefs"])
 api_router.include_router(drafts_router, prefix="/drafts", tags=["drafts"])
+api_router.include_router(templates_router, prefix="/templates", tags=["templates"])

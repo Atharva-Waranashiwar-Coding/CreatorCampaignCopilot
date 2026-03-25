@@ -15,6 +15,7 @@ from app.models.project import Project
 from app.models.user import User
 from app.schemas.content_draft import ContentDraftCreate, ContentDraftRead, ContentDraftUpdate
 from app.schemas.draft_version import DraftVersionRead
+from app.services.access import assert_brand_limit_available
 from app.services.audit import record_audit_log
 
 EDITORIAL_CREATE_STATUSES = {DraftStatus.IDEA, DraftStatus.DRAFT, DraftStatus.IN_REVIEW}
@@ -242,6 +243,13 @@ def _sync_draft_calendar_item(db: Session, *, draft: ContentDraft, actor_user_id
 
     status_value = _coerce_status(draft.status).value
     if calendar_item is None:
+        assert_brand_limit_available(
+            db,
+            brand_id=draft.campaign.project.brand_id,
+            user_id=actor_user_id,
+            metric_key="scheduled_items",
+            message="Scheduling this draft would exceed the current plan limit.",
+        )
         calendar_item = CalendarItem(
             brand_id=draft.campaign.project.brand_id,
             campaign_id=draft.campaign_id,

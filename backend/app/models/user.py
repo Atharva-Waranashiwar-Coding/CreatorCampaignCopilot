@@ -20,3 +20,4 @@ class User(TimestampMixin, Base):
     campaign_assets: Mapped[list["CampaignAsset"]] = relationship(lazy="selectin")
     draft_versions: Mapped[list["DraftVersion"]] = relationship(lazy="selectin")
     calendar_items: Mapped[list["CalendarItem"]] = relationship(lazy="selectin")
+    content_templates: Mapped[list["ContentTemplate"]] = relationship(lazy="selectin")

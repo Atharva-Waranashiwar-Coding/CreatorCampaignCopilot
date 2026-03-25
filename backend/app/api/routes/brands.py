@@ -5,8 +5,10 @@ from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.audit_log import AuditLogRead
+from app.schemas.billing import BrandBillingSnapshotRead, BrandSubscriptionUpdate
 from app.schemas.brand import BrandCreate, BrandRead, BrandUpdate
 from app.schemas.membership import MembershipInviteRequest, MembershipRead, MembershipUpdate
+from app.services.access import get_brand_billing_snapshot, update_brand_subscription
 from app.services.audit import list_brand_audit_logs
 from app.services.brands import (
     create_brand,
@@ -143,5 +145,30 @@ def read_brand_audit_logs(
 ) -> list[AuditLogRead]:
     try:
         return list_brand_audit_logs(db, brand_id=brand_id, user_id=current_user.id)
+    except Exception as exc:
+        _raise_service_error(exc)
+
+
+@router.get("/{brand_id}/billing", response_model=BrandBillingSnapshotRead)
+def read_brand_billing(
+    brand_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> BrandBillingSnapshotRead:
+    try:
+        return get_brand_billing_snapshot(db, brand_id=brand_id, user=current_user)
+    except Exception as exc:
+        _raise_service_error(exc)
+
+
+@router.patch("/{brand_id}/subscription", response_model=BrandBillingSnapshotRead)
+def update_brand_subscription_route(
+    brand_id: int,
+    payload: BrandSubscriptionUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> BrandBillingSnapshotRead:
+    try:
+        return update_brand_subscription(db, brand_id=brand_id, payload=payload, user=current_user)
     except Exception as exc:
         _raise_service_error(exc)

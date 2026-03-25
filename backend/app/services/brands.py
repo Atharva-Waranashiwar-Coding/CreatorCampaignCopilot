@@ -15,6 +15,7 @@ from app.models.user import User
 from app.schemas.brand import BrandCreate, BrandRead, BrandUpdate
 from app.schemas.membership import MembershipInviteRequest, MembershipRead, MembershipUpdate
 from app.schemas.user import UserRead
+from app.services.access import assert_brand_limit_available, create_default_brand_subscription
 from app.services.audit import record_audit_log
 from app.services.auth import get_user_by_email
 
@@ -151,6 +152,8 @@ def create_brand(db: Session, *, payload: BrandCreate, user: User) -> BrandRead:
     db.add(membership)
     db.flush()
 
+    create_default_brand_subscription(db, brand=brand, actor_user_id=user.id)
+
     record_audit_log(
         db,
         brand_id=brand.id,
@@ -247,6 +250,14 @@ def invite_membership(
     if existing is not None:
         raise ValueError("That email already has a membership or pending invite for this brand.")
 
+    assert_brand_limit_available(
+        db,
+        brand_id=brand_id,
+        user_id=user.id,
+        metric_key="members",
+        message="This brand has reached the member limit for its current plan.",
+    )
+
     invited_user = get_user_by_email(db, email)
     invited_membership = BrandMembership(
         brand_id=brand_id,
@@ -303,6 +314,14 @@ def update_membership(
     if "role" in changes and changes["role"] is not None:
         membership.role = changes["role"]
     if "status" in changes and changes["status"] is not None:
+        if membership.status != MembershipStatus.ACTIVE and changes["status"] == MembershipStatus.ACTIVE:
+            assert_brand_limit_available(
+                db,
+                brand_id=brand_id,
+                user_id=user.id,
+                metric_key="members",
+                message="Reactivating this member would exceed the current plan limit.",
+            )
         membership.status = changes["status"]
         if changes["status"] == MembershipStatus.ACTIVE and membership.joined_at is None:
             membership.joined_at = datetime.now(UTC)

@@ -16,6 +16,8 @@ export type DraftReviewAction =
   | "approved"
   | "rejected"
   | "resubmitted";
+export type PlanInterval = "monthly" | "yearly";
+export type SubscriptionStatus = "trialing" | "active" | "past_due" | "canceled";
 
 export type User = {
   id: number;
@@ -242,6 +244,17 @@ export type AuditLog = {
   created_at: string;
 };
 
+export type DashboardCountBucket = {
+  key: string;
+  label: string;
+  count: number;
+};
+
+export type DashboardDateBucket = {
+  date: string;
+  count: number;
+};
+
 export type DashboardSummary = {
   brand_count: number;
   project_count: number;
@@ -250,5 +263,114 @@ export type DashboardSummary = {
   draft_count: number;
   pending_review_count: number;
   approved_draft_count: number;
+  scheduled_item_count: number;
+  template_count: number;
   recent_activity: AuditLog[];
+};
+
+export type DashboardCampaignAnalytics = {
+  total: number;
+  active_count: number;
+  by_status: DashboardCountBucket[];
+};
+
+export type DashboardDraftAnalytics = {
+  total: number;
+  pending_review_count: number;
+  approved_count: number;
+  by_status: DashboardCountBucket[];
+};
+
+export type DashboardReviewAnalytics = {
+  pending_count: number;
+  recent_window_days: number;
+  recent_actions: DashboardCountBucket[];
+};
+
+export type DashboardScheduleAnalytics = {
+  upcoming_count: number;
+  overdue_count: number;
+  upcoming_by_day: DashboardDateBucket[];
+};
+
+export type DashboardAnalytics = {
+  campaigns: DashboardCampaignAnalytics;
+  drafts: DashboardDraftAnalytics;
+  reviews: DashboardReviewAnalytics;
+  schedule: DashboardScheduleAnalytics;
+};
+
+export type ContentTemplate = {
+  id: number;
+  brand_id: number;
+  brand_name: string;
+  name: string;
+  description: string | null;
+  template_type: string;
+  platform: string | null;
+  content_type: string | null;
+  body: string;
+  created_by: number;
+  creator_name: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type Plan = {
+  id: number;
+  code: string;
+  name: string;
+  description: string | null;
+  monthly_price_cents: number;
+  yearly_price_cents: number | null;
+  limits: Record<string, number | null>;
+  features: Record<string, boolean>;
+  is_active: boolean;
+  sort_order: number;
+};
+
+export type BrandSubscription = {
+  id: number;
+  brand_id: number;
+  plan_id: number;
+  plan_code: string;
+  plan_name: string;
+  status: SubscriptionStatus;
+  billing_interval: PlanInterval;
+  external_subscription_id: string | null;
+  current_period_start: string | null;
+  current_period_end: string | null;
+  cancel_at_period_end: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type UsageMetric = {
+  key: string;
+  label: string;
+  current: number;
+  limit: number | null;
+  remaining: number | null;
+  percent_used: number | null;
+  status: string;
+};
+
+export type FeatureAccess = {
+  key: string;
+  label: string;
+  description: string;
+  enabled: boolean;
+};
+
+export type BrandBillingSnapshot = {
+  brand_id: number;
+  brand_name: string;
+  current_user_role: BrandRole;
+  subscription: BrandSubscription;
+  current_plan: Plan;
+  available_plans: Plan[];
+  usage: UsageMetric[];
+  features: FeatureAccess[];
+  upgrade_prompts: string[];
+  recent_plan_activity: AuditLog[];
 };
