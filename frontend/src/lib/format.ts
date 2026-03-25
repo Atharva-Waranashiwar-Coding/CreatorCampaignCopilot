@@ -18,3 +18,7 @@ export function formatDate(value: string | null | undefined) {
     dateStyle: "medium",
   }).format(new Date(value));
 }
+
+export function formatStatusLabel(value: string) {
+  return value.replace(/_/g, " ");
+}
