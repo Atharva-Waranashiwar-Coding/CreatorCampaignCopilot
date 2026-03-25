@@ -1,6 +1,6 @@
 # Creator Campaign Copilot
 
-Phase 8 workspace for multi-brand campaign planning, board-based draft operations, platform previews, collaboration workflows, helper tools, MCP exposure, templates, analytics, and subscription-aware usage controls.
+Phase 9 workspace for multi-brand campaign planning, campaign intelligence analytics, board-based draft operations, platform previews, collaboration workflows, helper tools, MCP exposure, templates, and subscription-aware usage controls.
 
 ## Stack
 
@@ -9,7 +9,7 @@ Phase 8 workspace for multi-brand campaign planning, board-based draft operation
 - Database: PostgreSQL
 - Dev environment: Docker Compose
 
-## Phase 8 scope
+## Phase 9 scope
 
 - Email/password auth scaffold with JWT access tokens
 - Core backend modules for users, brands, memberships, projects, campaigns, and audit logs
@@ -40,6 +40,10 @@ Phase 8 workspace for multi-brand campaign planning, board-based draft operation
 - Stage-based board interactions that map onto the existing review workflow
 - Platform preview surfaces for LinkedIn, Instagram captions, email, and blog/article layouts
 - Lightweight draft-editor enhancements with quick-insert writing tools and content stats
+- Campaign health scoring with transparent per-factor penalties
+- Team workload analytics for draft ownership, reviewer queues, and bottlenecks by status
+- Approval turnaround analytics covering review timing, rejection rate, and repeat revision cycles
+- Content mix analytics by platform, content type, campaign status, and week/month volume
 - Alembic migrations for Phases 1 through 7
 
 ## Quick start
@@ -73,7 +77,7 @@ The backend container runs `alembic upgrade head` before starting the FastAPI se
 - `MCP_ENABLE_SSE_TRANSPORT=false` leaves SSE off unless you explicitly need it.
 - The helper REST endpoints remain available under `/api/tools/helpers/*` even if the MCP layer is disabled.
 
-## Phase 8 workflow
+## Phase 9 workflow
 
 1. Create an account from the login page.
 2. Create a brand workspace.
@@ -99,6 +103,8 @@ The backend container runs `alembic upgrade head` before starting the FastAPI se
 22. Switch the campaign planner between board, list, and calendar views depending on the planning task.
 23. Drag supported draft stages across the board to move ideas into review, approve work, and advance scheduled content.
 24. Use the draft detail preview panel to inspect LinkedIn, Instagram, email, and article layouts while editing copy.
+25. Use the dashboard to identify which campaigns are healthy, slipping, or critical and inspect the exact penalty factors behind each score.
+26. Review team workload, reviewer queues, revision churn, and content-mix trends before reallocating work.
 
 ## Backend entities in this phase
 
@@ -127,6 +133,8 @@ The backend container runs `alembic upgrade head` before starting the FastAPI se
 - `/api/auth`
 - `/api/dashboard`
 - `/api/dashboard/analytics`
+- `/api/dashboard/campaign-health`
+- `/api/dashboard/campaign-health/{campaign_id}`
 - `/api/brands`
 - `/api/brands/{brand_id}/billing`
 - `/api/brands/{brand_id}/subscription`
@@ -162,6 +170,9 @@ The backend container runs `alembic upgrade head` before starting the FastAPI se
 - Campaign planning now supports board, list, and calendar views inside the campaign workspace.
 - Board stage moves intentionally route through the existing review and editorial rules rather than bypassing them.
 - Draft previews render from the existing `ContentDraft` fields instead of a separate preview-only model.
+- Campaign health starts at `100` and subtracts capped penalties for overdue drafts, pending approvals, missing assets, unassigned work, and deadline pressure inside the next 7 days.
+- Approval turnaround is measured from `submitted` or `resubmitted` to the next approval or rejection event.
+- Content mix trends are based on draft creation volume and can be grouped by week or month from the dashboard.
 - Reviewer approvals only operate on drafts already in `in_review`.
 - New brands receive the seeded `starter` plan by default.
 - Plan changes and template actions are recorded in the existing audit log stream.

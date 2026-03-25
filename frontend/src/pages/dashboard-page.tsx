@@ -352,6 +352,13 @@ function HealthSummaryCard({
             <HealthCountPill label="At risk" tone="warning" value={atRiskCount} />
             <HealthCountPill label="Critical" tone="warning" value={criticalCount} />
           </div>
+
+          <div className="mt-6 grid gap-3 md:grid-cols-2">
+            <HealthLegendItem label="Healthy" range="85-100" description="No major workflow pressure is active." />
+            <HealthLegendItem label="Watch" range="70-84" description="Some delivery risk is building but still manageable." />
+            <HealthLegendItem label="At risk" range="50-69" description="The campaign needs intervention to avoid slippage." />
+            <HealthLegendItem label="Critical" range="0-49" description="Multiple health penalties are compounding at once." />
+          </div>
         </div>
       )}
     </Card>
@@ -410,11 +417,17 @@ function CampaignHealthListCard({
               </div>
 
               {campaign.factors.length ? (
-                <div className="mt-4 flex flex-wrap gap-2">
+                <div className="mt-4 space-y-2">
                   {campaign.factors.map((factor) => (
-                    <Badge key={factor.key} tone="warning">
-                      -{factor.penalty} {factor.label.toLowerCase()} ({factor.count})
-                    </Badge>
+                    <div key={factor.key} className="rounded-[1rem] border border-amber-200 bg-amber-50/70 px-3 py-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge tone="warning">-{factor.penalty}</Badge>
+                        <p className="text-sm font-medium text-foreground">
+                          {factor.label} · {factor.count}
+                        </p>
+                      </div>
+                      <p className="mt-2 text-sm leading-6 text-muted-foreground">{factor.detail}</p>
+                    </div>
                   ))}
                 </div>
               ) : (
@@ -615,6 +628,26 @@ function StatCard({ label, value }: { label: string; value: number | string }) {
     <div className="rounded-[1.2rem] border border-border bg-white/80 px-4 py-4">
       <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">{label}</p>
       <p className="mt-3 text-2xl font-semibold tracking-tight">{value}</p>
+    </div>
+  );
+}
+
+function HealthLegendItem({
+  description,
+  label,
+  range,
+}: {
+  description: string;
+  label: string;
+  range: string;
+}) {
+  return (
+    <div className="rounded-[1.15rem] border border-border bg-white/80 px-4 py-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm font-semibold text-foreground">{label}</p>
+        <Badge tone={healthTone(label.toLowerCase().replace(" ", "_"))}>{range}</Badge>
+      </div>
+      <p className="mt-3 text-sm leading-6 text-muted-foreground">{description}</p>
     </div>
   );
 }
