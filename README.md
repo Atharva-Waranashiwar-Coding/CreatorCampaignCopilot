@@ -1,6 +1,6 @@
 # Creator Campaign Copilot
 
-Phase 10 workspace for multi-brand campaign planning, configurable draft workflows, campaign milestones, dependency-aware board operations, campaign intelligence analytics, platform previews, collaboration workflows, helper tools, MCP exposure, templates, and subscription-aware usage controls.
+Phase 11 workspace for multi-brand campaign planning, configurable draft workflows, campaign milestones, dependency-aware board operations, campaign intelligence analytics, platform previews, collaboration workflows, advanced helper tools, MCP exposure, templates, and subscription-aware usage controls.
 
 ## Stack
 
@@ -9,7 +9,7 @@ Phase 10 workspace for multi-brand campaign planning, configurable draft workflo
 - Database: PostgreSQL
 - Dev environment: Docker Compose
 
-## Phase 10 scope
+## Phase 11 scope
 
 - Email/password auth scaffold with JWT access tokens
 - Core backend modules for users, brands, memberships, projects, campaigns, and audit logs
@@ -32,8 +32,9 @@ Phase 10 workspace for multi-brand campaign planning, configurable draft workflo
 - Content template model and CRUD workflow
 - Dashboard analytics for campaign status, draft pipeline, review activity, and schedule pressure
 - Internal helper tools for brand guidelines, templates, content validation, campaign assets, and review summaries
+- Advanced content-operation helpers for brand voice validation, cross-channel adaptation, template recommendation, asset recommendation, and feedback-to-checklist conversion
 - Optional FastAPI-MCP exposure isolated behind helper-tool routes
-- Tool usage logging and admin visibility for helper tool availability and recent executions
+- Tool usage logging and admin visibility for helper tool availability, recent executions, and request/result traces filtered by draft
 - Collaboration comments with threaded replies on campaigns and drafts
 - Mentions parsing for comments and review notes using `@email`
 - Assignment workflows for campaigns, drafts, and review tasks
@@ -101,16 +102,17 @@ The backend container runs `alembic upgrade head` before starting the FastAPI se
 17. Filter drafts by campaign, platform, status, or search term.
 18. Invite additional members from the brand page.
 19. Upgrade or rebalance the brand plan as usage approaches current limits.
-20. Review the helper tool catalog and recent tool activity from the Helper Tools page.
+20. Review the helper tool catalog and recent advanced tool activity from the Helper Tools page.
 21. Use the helper routes directly or through the MCP mount when an MCP client is configured.
-22. Assign campaign, draft, or review-task ownership directly from the workspace pages.
-23. Use `@email` mentions in draft discussion, campaign discussion, and review notes.
-24. Follow collaboration events from the notifications center and campaign activity feed.
-25. Switch the campaign planner between board, list, and calendar views depending on the planning task.
-26. Move drafts across the planner board using the brand workflow while blocked states remain visible.
-27. Use the draft detail preview panel to inspect LinkedIn, Instagram, email, and article layouts while editing copy.
-28. Use the dashboard to identify which campaigns are healthy, slipping, or critical and inspect the exact penalty factors behind each score.
-29. Review team workload, reviewer queues, revision churn, and content-mix trends before reallocating work.
+22. Run advanced helper operations from the draft detail page to validate tone, adapt copy, rank templates or assets, and convert review feedback into a checklist.
+23. Assign campaign, draft, or review-task ownership directly from the workspace pages.
+24. Use `@email` mentions in draft discussion, campaign discussion, and review notes.
+25. Follow collaboration events from the notifications center and campaign activity feed.
+26. Switch the campaign planner between board, list, and calendar views depending on the planning task.
+27. Move drafts across the planner board using the brand workflow while blocked states remain visible.
+28. Use the draft detail preview panel to inspect LinkedIn, Instagram, email, and article layouts while editing copy.
+29. Use the dashboard to identify which campaigns are healthy, slipping, or critical and inspect the exact penalty factors behind each score.
+30. Review team workload, reviewer queues, revision churn, and content-mix trends before reallocating work.
 
 ## Backend entities in this phase
 
@@ -193,7 +195,7 @@ The backend container runs `alembic upgrade head` before starting the FastAPI se
 - Plan changes and template actions are recorded in the existing audit log stream.
 - Usage checks are currently enforced for member count, active campaigns, upcoming scheduled items, and template count.
 - The MCP layer is optional. Base product routes remain available even if MCP is disabled or `fastapi-mcp` is unavailable at runtime.
-- Helper tool usage is recorded in `tool_usage_logs` with request, result summary, success state, and target metadata.
+- Helper tool usage is recorded in `tool_usage_logs` with compact request/result summaries plus full request/result traces, success state, and draft/campaign target metadata.
 - Collaboration permissions stay aligned to the existing brand-level RBAC model.
 - Assignment creation uses workspace-management roles, while assignees can complete their own open assignments.
 - Due-soon notifications are generated from open assignments with due dates inside the notification sync window.

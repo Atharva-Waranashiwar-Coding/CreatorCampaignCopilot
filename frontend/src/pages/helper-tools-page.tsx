@@ -18,7 +18,7 @@ export function HelperToolsPage() {
 
   const usageQuery = useQuery({
     queryKey: ["helper-tools", "usage"],
-    queryFn: () => apiRequest<ToolUsageLog[]>("/tools/usage?limit=20", {}, token),
+    queryFn: () => apiRequest<ToolUsageLog[]>("/tools/usage?limit=20&advanced_only=true", {}, token),
   });
 
   const catalog = catalogQuery.data;
@@ -29,7 +29,7 @@ export function HelperToolsPage() {
       <PageHeader
         eyebrow="Helper Tools"
         title="Internal MCP helper layer visibility"
-        description="Inspect the helper tools exposed through FastAPI, confirm MCP availability, and review recent tool executions across brands you can access."
+        description="Inspect the helper tools exposed through FastAPI, confirm MCP availability, and review recent advanced helper executions across brands you can access."
         actions={(
           <>
             <Badge tone={catalog?.mcp_helpers_enabled ? "success" : "warning"}>
@@ -101,7 +101,7 @@ export function HelperToolsPage() {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Usage</p>
-                <h2 className="mt-2 text-2xl font-semibold tracking-tight">Recent executions</h2>
+                <h2 className="mt-2 text-2xl font-semibold tracking-tight">Recent advanced executions</h2>
               </div>
               {usage.length ? <Badge tone="muted">{usage.length} entries</Badge> : null}
             </div>
@@ -132,11 +132,18 @@ export function HelperToolsPage() {
                       Target: {formatActionLabel(item.target_entity_type)}{" "}
                       {item.target_entity_id ? `#${item.target_entity_id}` : "context"}
                     </p>
+                    {item.draft_id || item.campaign_id ? (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {item.draft_id ? <Badge tone="muted">Draft #{item.draft_id}</Badge> : null}
+                        {item.campaign_id ? <Badge tone="muted">Campaign #{item.campaign_id}</Badge> : null}
+                      </div>
+                    ) : null}
+                    <p className="mt-3 text-sm text-muted-foreground">{extractUsageSummary(item)}</p>
                     <div className="mt-4 grid gap-3">
-                      <PayloadBlock label="Request" value={item.request_payload} />
+                      <PayloadBlock label="Request trace" value={item.request_trace ?? item.request_payload} />
                       <PayloadBlock
-                        label={item.was_successful ? "Result" : "Error"}
-                        value={item.was_successful ? item.result_summary : { error: item.error_detail }}
+                        label={item.was_successful ? "Result trace" : "Error trace"}
+                        value={item.was_successful ? item.result_trace ?? item.result_summary : { error: item.error_detail }}
                       />
                     </div>
                   </div>
@@ -144,7 +151,7 @@ export function HelperToolsPage() {
               </div>
             ) : (
               <p className="mt-6 text-sm text-muted-foreground">
-                Tool usage will appear here once the helper layer is exercised through REST or MCP.
+                Advanced helper activity will appear here once tone validation, adaptation, recommendation, or revision-conversion tools are exercised.
               </p>
             )}
           </Card>
@@ -191,7 +198,7 @@ function PayloadBlock({
   value,
 }: {
   label: string;
-  value: Record<string, unknown>;
+  value: Record<string, unknown> | null;
 }) {
   const text = truncateJson(value);
 
@@ -217,10 +224,21 @@ function QueryError({ error }: { error: unknown }) {
   );
 }
 
-function truncateJson(value: Record<string, unknown>) {
-  const text = JSON.stringify(value, null, 2);
+function truncateJson(value: Record<string, unknown> | null | undefined) {
+  const text = JSON.stringify(value ?? {}, null, 2);
   if (text.length <= 600) {
     return text;
   }
   return `${text.slice(0, 597).trimEnd()}...`;
+}
+
+function extractUsageSummary(item: ToolUsageLog) {
+  const summary = item.result_trace?.summary;
+  if (typeof summary === "string" && summary.trim()) {
+    return summary;
+  }
+  if (!item.was_successful && item.error_detail) {
+    return item.error_detail;
+  }
+  return "Structured request and result traces are available below.";
 }
