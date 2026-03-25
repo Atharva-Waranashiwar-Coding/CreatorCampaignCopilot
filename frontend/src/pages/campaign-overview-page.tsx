@@ -24,6 +24,7 @@ import type {
   CampaignAsset,
   CampaignOverview,
   CollaborationComment,
+  ContentDraft,
   DraftStatus,
   Membership,
 } from "../lib/types";
@@ -288,6 +289,30 @@ export function CampaignOverviewPage() {
       queryClient.invalidateQueries({ queryKey: ["campaign-assignments", campaignId] });
       queryClient.invalidateQueries({ queryKey: ["assignments", "mine"] });
       queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    },
+  });
+
+  const moveDraftStageMutation = useMutation({
+    mutationFn: ({ draft, targetStatus }: { draft: ContentDraft; targetStatus: DraftStatus }) =>
+      apiRequest<ContentDraft>(
+        `/drafts/${draft.id}/move-stage`,
+        {
+          method: "POST",
+          body: JSON.stringify({ target_status: targetStatus }),
+        },
+        token,
+      ),
+    onSuccess: async (draft) => {
+      await queryClient.invalidateQueries({ queryKey: ["campaign-overview", campaignId] });
+      await queryClient.invalidateQueries({ queryKey: ["drafts"] });
+      await queryClient.invalidateQueries({ queryKey: ["draft", String(draft.id)] });
+      await queryClient.invalidateQueries({ queryKey: ["draft-reviews", String(draft.id)] });
+      await queryClient.invalidateQueries({ queryKey: ["draft-versions", String(draft.id)] });
+      await queryClient.invalidateQueries({ queryKey: ["review-queue"] });
+      await queryClient.invalidateQueries({ queryKey: ["campaigns"] });
+      await queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
+      await queryClient.invalidateQueries({ queryKey: ["calendar-items"] });
+      await queryClient.invalidateQueries({ queryKey: ["notifications"] });
     },
   });
 
@@ -725,9 +750,16 @@ export function CampaignOverviewPage() {
         <CampaignPlanner
           currentUserRole={currentMembership?.role}
           drafts={overview.drafts}
+          isMovingDraftId={moveDraftStageMutation.variables?.draft.id ?? null}
+          onMoveDraft={(draft, targetStatus) => moveDraftStageMutation.mutate({ draft, targetStatus })}
           planningSummary={overview.planning_summary}
           schedule={overview.schedule}
         />
+        {moveDraftStageMutation.error ? (
+          <div className="mt-4">
+            <MutationFeedback error={moveDraftStageMutation.error} />
+          </div>
+        ) : null}
       </div>
 
       <div className="mt-8">
