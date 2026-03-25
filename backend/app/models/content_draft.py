@@ -35,3 +35,9 @@ class ContentDraft(TimestampMixin, Base):
 
     campaign: Mapped["Campaign"] = relationship(back_populates="drafts")
     creator: Mapped["User"] = relationship(back_populates="drafts", foreign_keys=[created_by])
+    reviews: Mapped[list["DraftReview"]] = relationship(
+        back_populates="draft",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+        order_by="DraftReview.created_at.desc()",
+    )

@@ -6,7 +6,22 @@ from app.core.enums import DraftStatus
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.content_draft import ContentDraftCreate, ContentDraftRead, ContentDraftUpdate
+from app.schemas.draft_review import (
+    DraftReviewCreate,
+    DraftReviewDecision,
+    DraftReviewRead,
+    DraftReviewThreadRead,
+)
 from app.services.drafts import create_draft, delete_draft, get_draft, list_drafts, update_draft
+from app.services.reviews import (
+    add_review_comment,
+    approve_draft,
+    get_draft_review_thread,
+    list_review_queue,
+    reject_draft,
+    resubmit_draft,
+    submit_draft_for_review,
+)
 
 router = APIRouter()
 
@@ -40,6 +55,17 @@ def read_drafts(
     )
 
 
+@router.get("/review-queue", response_model=list[ContentDraftRead])
+def read_review_queue(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[ContentDraftRead]:
+    try:
+        return list_review_queue(db, user=current_user)
+    except Exception as exc:
+        _raise_service_error(exc)
+
+
 @router.post("", response_model=ContentDraftRead, status_code=status.HTTP_201_CREATED)
 def create_draft_route(
     payload: ContentDraftCreate,
@@ -48,6 +74,83 @@ def create_draft_route(
 ) -> ContentDraftRead:
     try:
         return create_draft(db, payload=payload, user=current_user)
+    except Exception as exc:
+        _raise_service_error(exc)
+
+
+@router.get("/{draft_id}/reviews", response_model=DraftReviewThreadRead)
+def read_draft_reviews(
+    draft_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> DraftReviewThreadRead:
+    try:
+        return get_draft_review_thread(db, draft_id=draft_id, user=current_user)
+    except Exception as exc:
+        _raise_service_error(exc)
+
+
+@router.post("/{draft_id}/reviews", response_model=DraftReviewRead, status_code=status.HTTP_201_CREATED)
+def create_draft_review(
+    draft_id: int,
+    payload: DraftReviewCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> DraftReviewRead:
+    try:
+        return add_review_comment(db, draft_id=draft_id, payload=payload, user=current_user)
+    except Exception as exc:
+        _raise_service_error(exc)
+
+
+@router.post("/{draft_id}/submit", response_model=ContentDraftRead)
+def submit_draft_route(
+    draft_id: int,
+    payload: DraftReviewDecision,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ContentDraftRead:
+    try:
+        return submit_draft_for_review(db, draft_id=draft_id, payload=payload, user=current_user)
+    except Exception as exc:
+        _raise_service_error(exc)
+
+
+@router.post("/{draft_id}/approve", response_model=ContentDraftRead)
+def approve_draft_route(
+    draft_id: int,
+    payload: DraftReviewDecision,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ContentDraftRead:
+    try:
+        return approve_draft(db, draft_id=draft_id, payload=payload, user=current_user)
+    except Exception as exc:
+        _raise_service_error(exc)
+
+
+@router.post("/{draft_id}/reject", response_model=ContentDraftRead)
+def reject_draft_route(
+    draft_id: int,
+    payload: DraftReviewDecision,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ContentDraftRead:
+    try:
+        return reject_draft(db, draft_id=draft_id, payload=payload, user=current_user)
+    except Exception as exc:
+        _raise_service_error(exc)
+
+
+@router.post("/{draft_id}/resubmit", response_model=ContentDraftRead)
+def resubmit_draft_route(
+    draft_id: int,
+    payload: DraftReviewDecision,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ContentDraftRead:
+    try:
+        return resubmit_draft(db, draft_id=draft_id, payload=payload, user=current_user)
     except Exception as exc:
         _raise_service_error(exc)
 

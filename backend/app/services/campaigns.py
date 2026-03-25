@@ -5,11 +5,13 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.core.enums import CampaignStatus, DraftStatus, MembershipStatus
 from app.core.permissions import WORKSPACE_MANAGEMENT_ROLES, require_role
+from app.models.audit_log import AuditLog
 from app.models.brand_membership import BrandMembership
 from app.models.campaign import Campaign
 from app.models.content_draft import ContentDraft
 from app.models.project import Project
 from app.models.user import User
+from app.schemas.audit_log import AuditLogRead
 from app.schemas.campaign import CampaignCreate, CampaignRead, CampaignUpdate
 from app.schemas.campaign_workspace import CampaignOverviewRead
 from app.schemas.content_brief import ContentBriefRead
@@ -52,6 +54,7 @@ def _get_campaign_with_role(db: Session, *, campaign_id: int, user_id: int) -> t
             selectinload(Campaign.project).selectinload(Project.brand),
             selectinload(Campaign.brief),
             selectinload(Campaign.drafts).selectinload(ContentDraft.creator),
+            selectinload(Campaign.drafts).selectinload(ContentDraft.reviews),
         )
         .where(
             Campaign.id == campaign_id,
@@ -78,7 +81,7 @@ def list_campaigns(
         .options(
             selectinload(Campaign.project).selectinload(Project.brand),
             selectinload(Campaign.brief),
-            selectinload(Campaign.drafts),
+            selectinload(Campaign.drafts).selectinload(ContentDraft.reviews),
         )
         .where(
             BrandMembership.user_id == user.id,
@@ -120,6 +123,7 @@ def _serialize_brief_for_campaign(campaign: Campaign) -> ContentBriefRead | None
 
 def _serialize_draft_for_campaign(draft: ContentDraft) -> ContentDraftRead:
     status = _coerce_draft_status(draft.status)
+    latest_review = draft.reviews[0] if draft.reviews else None
     return ContentDraftRead(
         id=draft.id,
         campaign_id=draft.campaign_id,
@@ -137,15 +141,48 @@ def _serialize_draft_for_campaign(draft: ContentDraft) -> ContentDraftRead:
         current_version_number=draft.current_version_number,
         created_by=draft.created_by,
         creator_name=draft.creator.full_name if draft.creator else None,
+        review_count=len(draft.reviews),
+        latest_review_action=latest_review.action if latest_review else None,
+        latest_reviewed_at=latest_review.created_at if latest_review else None,
         created_at=draft.created_at,
         updated_at=draft.updated_at,
     )
+
+
+def _serialize_audit_log(log: AuditLog) -> AuditLogRead:
+    return AuditLogRead(
+        id=log.id,
+        brand_id=log.brand_id,
+        actor_user_id=log.actor_user_id,
+        actor_name=log.actor.full_name if log.actor else None,
+        entity_type=log.entity_type,
+        entity_id=log.entity_id,
+        action=log.action,
+        metadata=log.metadata_json,
+        created_at=log.created_at,
+    )
+
+
+def _belongs_to_campaign(log: AuditLog, campaign_id: int) -> bool:
+    if log.entity_type == "campaign" and log.entity_id == campaign_id:
+        return True
+
+    campaign_ref = log.metadata_json.get("campaign_id")
+    return campaign_ref in {campaign_id, str(campaign_id)}
 
 
 def get_campaign_overview(db: Session, *, campaign_id: int, user: User) -> CampaignOverviewRead:
     campaign, _ = _get_campaign_with_role(db, campaign_id=campaign_id, user_id=user.id)
     ordered_drafts = sorted(campaign.drafts, key=lambda draft: draft.created_at, reverse=True)
     status_counts = Counter(_coerce_draft_status(draft.status) for draft in ordered_drafts)
+    brand_logs = db.scalars(
+        select(AuditLog)
+        .options(joinedload(AuditLog.actor))
+        .where(AuditLog.brand_id == campaign.project.brand_id)
+        .order_by(AuditLog.created_at.desc())
+        .limit(80)
+    ).all()
+    activity_timeline = [_serialize_audit_log(log) for log in brand_logs if _belongs_to_campaign(log, campaign.id)][:20]
 
     return CampaignOverviewRead(
         campaign=_serialize_campaign(campaign),
@@ -155,6 +192,7 @@ def get_campaign_overview(db: Session, *, campaign_id: int, user: User) -> Campa
             DraftStatusCount(status=status, count=status_counts.get(status, 0))
             for status in DraftStatus
         ],
+        activity_timeline=activity_timeline,
     )
 
 

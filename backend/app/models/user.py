@@ -16,3 +16,4 @@ class User(TimestampMixin, Base):
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
 
     drafts: Mapped[list["ContentDraft"]] = relationship(back_populates="creator", lazy="selectin")
+    draft_reviews: Mapped[list["DraftReview"]] = relationship(back_populates="actor", lazy="selectin")

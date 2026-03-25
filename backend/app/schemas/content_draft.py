@@ -2,7 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.core.enums import DraftStatus
+from app.core.enums import DraftReviewAction, DraftStatus
 
 
 class ContentDraftCreate(BaseModel):
@@ -43,6 +43,9 @@ class ContentDraftRead(BaseModel):
     current_version_number: int
     created_by: int
     creator_name: str | None = None
+    review_count: int = 0
+    latest_review_action: DraftReviewAction | None = None
+    latest_reviewed_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
 

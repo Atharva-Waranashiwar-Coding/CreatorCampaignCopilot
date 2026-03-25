@@ -4,6 +4,7 @@ from app.models.brand_membership import BrandMembership
 from app.models.campaign import Campaign
 from app.models.content_brief import ContentBrief
 from app.models.content_draft import ContentDraft
+from app.models.draft_review import DraftReview
 from app.models.project import Project
 from app.models.user import User
 
@@ -14,6 +15,7 @@ __all__ = [
     "Campaign",
     "ContentBrief",
     "ContentDraft",
+    "DraftReview",
     "Project",
     "User",
 ]
