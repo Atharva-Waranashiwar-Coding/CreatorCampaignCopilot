@@ -14,7 +14,7 @@ import { useAuthStore } from "../features/auth/auth-store";
 import { ApiError, apiRequest } from "../lib/api";
 import { formatActionLabel, formatDateTime, formatStatusLabel } from "../lib/format";
 import { queryClient } from "../lib/query-client";
-import type { ContentDraft, DraftReviewAction, DraftReviewThread } from "../lib/types";
+import type { ContentDraft, DraftReviewAction, DraftReviewThread, DraftVersion } from "../lib/types";
 
 type DraftFormState = {
   title: string;
@@ -46,6 +46,12 @@ export function DraftDetailPage() {
   const reviewThreadQuery = useQuery({
     queryKey: ["draft-reviews", draftId],
     queryFn: () => apiRequest<DraftReviewThread>(`/drafts/${draftId}/reviews`, {}, token),
+    enabled: Boolean(draftId),
+  });
+
+  const versionsQuery = useQuery({
+    queryKey: ["draft-versions", draftId],
+    queryFn: () => apiRequest<DraftVersion[]>(`/drafts/${draftId}/versions`, {}, token),
     enabled: Boolean(draftId),
   });
 
@@ -113,9 +119,10 @@ export function DraftDetailPage() {
 
   const draft = draftQuery.data;
   const reviewThread = reviewThreadQuery.data;
+  const versions = versionsQuery.data ?? [];
   const availableActions = reviewThread?.available_actions ?? [];
 
-  if (draftQuery.isLoading || reviewThreadQuery.isLoading || !draft || !form || !reviewThread) {
+  if (draftQuery.isLoading || reviewThreadQuery.isLoading || versionsQuery.isLoading || !draft || !form || !reviewThread) {
     return (
       <Card className="border-white/70 bg-white/85 p-8 shadow-xl shadow-slate-900/5">
         <p className="text-sm uppercase tracking-[0.3em] text-muted-foreground">Loading draft</p>
@@ -336,6 +343,44 @@ export function DraftDetailPage() {
           <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
             <div className="flex items-center justify-between gap-4">
               <div>
+                <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Version history</p>
+                <h2 className="mt-2 text-2xl font-semibold tracking-tight">Saved snapshots</h2>
+              </div>
+              <Badge tone="muted">{versions.length} versions</Badge>
+            </div>
+
+            <div className="mt-5 space-y-3">
+              {versions.length ? (
+                versions.map((version) => (
+                  <div key={version.id} className="rounded-[1.25rem] border border-border bg-white/80 px-4 py-4">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <Badge tone="muted">v{version.version_number}</Badge>
+                      <Badge>{version.platform}</Badge>
+                      <Badge tone={statusTone(version.status)}>{formatStatusLabel(version.status)}</Badge>
+                    </div>
+                    <p className="mt-3 text-sm font-medium text-foreground">
+                      {version.change_summary ?? version.title}
+                    </p>
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      {version.creator_name ?? "Unknown user"} · {formatDateTime(version.created_at)}
+                    </p>
+                    <p className="mt-3 text-sm text-muted-foreground">
+                      {version.content_type}
+                      {version.planned_publish_at ? ` · Scheduled ${formatDateTime(version.planned_publish_at)}` : ""}
+                    </p>
+                  </div>
+                ))
+              ) : (
+                <p className="rounded-[1.25rem] border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
+                  Version snapshots will appear here once meaningful edits are saved.
+                </p>
+              )}
+            </div>
+          </Card>
+
+          <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
+            <div className="flex items-center justify-between gap-4">
+              <div>
                 <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Review history</p>
                 <h2 className="mt-2 text-2xl font-semibold tracking-tight">Revision loop</h2>
               </div>
@@ -378,6 +423,7 @@ async function invalidateDraftQueries(campaignId: number | undefined, draftId: s
   if (draftId) {
     await queryClient.invalidateQueries({ queryKey: ["draft", draftId] });
     await queryClient.invalidateQueries({ queryKey: ["draft-reviews", draftId] });
+    await queryClient.invalidateQueries({ queryKey: ["draft-versions", draftId] });
   }
   await queryClient.invalidateQueries({ queryKey: ["drafts"] });
   await queryClient.invalidateQueries({ queryKey: ["review-queue"] });

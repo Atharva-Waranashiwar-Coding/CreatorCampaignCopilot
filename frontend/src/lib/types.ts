@@ -135,6 +135,65 @@ export type ContentDraft = {
   updated_at: string;
 };
 
+export type CampaignAsset = {
+  id: number;
+  campaign_id: number;
+  name: string;
+  asset_type: string;
+  file_url: string;
+  thumbnail_url: string | null;
+  mime_type: string | null;
+  file_size_bytes: number | null;
+  notes: string | null;
+  created_by: number;
+  creator_name: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type DraftVersion = {
+  id: number;
+  draft_id: number;
+  draft_title: string;
+  campaign_id: number;
+  campaign_name: string;
+  project_id: number;
+  project_name: string;
+  brand_id: number;
+  brand_name: string;
+  version_number: number;
+  title: string;
+  platform: string;
+  content_type: string;
+  content_body: string | null;
+  status: DraftStatus;
+  planned_publish_at: string | null;
+  change_summary: string | null;
+  created_by: number;
+  creator_name: string | null;
+  created_at: string;
+};
+
+export type CalendarItem = {
+  id: number;
+  brand_id: number;
+  brand_name: string;
+  campaign_id: number;
+  campaign_name: string;
+  draft_id: number | null;
+  draft_title: string | null;
+  title: string;
+  platform: string | null;
+  item_type: string;
+  scheduled_for: string;
+  status: string | null;
+  notes: string | null;
+  created_by: number;
+  creator_name: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type DraftReview = {
   id: number;
   draft_id: number;
@@ -164,6 +223,9 @@ export type CampaignOverview = {
   campaign: Campaign;
   brief: ContentBrief | null;
   drafts: ContentDraft[];
+  assets: CampaignAsset[];
+  recent_versions: DraftVersion[];
+  schedule: CalendarItem[];
   status_breakdown: DraftStatusCount[];
   activity_timeline: AuditLog[];
 };
