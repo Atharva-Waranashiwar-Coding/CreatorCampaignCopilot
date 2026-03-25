@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 
+import { CampaignPlanner } from "../components/campaign-planning/campaign-planner";
 import { AssignmentPanel } from "../components/collaboration/assignment-panel";
 import { ThreadedCommentsCard } from "../components/collaboration/threaded-comments-card";
 import { PageHeader } from "../components/shared/page-header";
@@ -23,6 +24,7 @@ import type {
   CampaignAsset,
   CampaignOverview,
   CollaborationComment,
+  ContentDraft,
   DraftStatus,
   Membership,
 } from "../lib/types";
@@ -120,6 +122,7 @@ export function CampaignOverviewPage() {
 
   const overview = overviewQuery.data;
   const campaign = overview?.campaign;
+  const currentMembership = membershipsQuery.data?.find((membership) => membership.user_id === currentUser?.id) ?? null;
 
   useEffect(() => {
     if (!overview?.brief) {
@@ -289,6 +292,30 @@ export function CampaignOverviewPage() {
     },
   });
 
+  const moveDraftStageMutation = useMutation({
+    mutationFn: ({ draft, targetStatus }: { draft: ContentDraft; targetStatus: DraftStatus }) =>
+      apiRequest<ContentDraft>(
+        `/drafts/${draft.id}/move-stage`,
+        {
+          method: "POST",
+          body: JSON.stringify({ target_status: targetStatus }),
+        },
+        token,
+      ),
+    onSuccess: async (draft) => {
+      await queryClient.invalidateQueries({ queryKey: ["campaign-overview", campaignId] });
+      await queryClient.invalidateQueries({ queryKey: ["drafts"] });
+      await queryClient.invalidateQueries({ queryKey: ["draft", String(draft.id)] });
+      await queryClient.invalidateQueries({ queryKey: ["draft-reviews", String(draft.id)] });
+      await queryClient.invalidateQueries({ queryKey: ["draft-versions", String(draft.id)] });
+      await queryClient.invalidateQueries({ queryKey: ["review-queue"] });
+      await queryClient.invalidateQueries({ queryKey: ["campaigns"] });
+      await queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
+      await queryClient.invalidateQueries({ queryKey: ["calendar-items"] });
+      await queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    },
+  });
+
   if (overviewQuery.isLoading) {
     return <LoadingState label="Loading campaign workspace" />;
   }
@@ -316,7 +343,71 @@ export function CampaignOverviewPage() {
         }
       />
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <Card className="border-white/70 bg-white/90 p-6 shadow-xl shadow-slate-900/5">
+        <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+          <div>
+            <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Workspace snapshot</p>
+            <h2 className="mt-2 text-3xl font-semibold tracking-tight">Keep the brief, pipeline, and schedule moving together</h2>
+            <p className="mt-4 max-w-3xl text-sm leading-7 text-muted-foreground">
+              {campaign.objective
+                ? campaign.objective
+                : "This campaign still needs a sharper objective. Use the brief below to define the narrative, CTA, and channel plan before content production accelerates."}
+            </p>
+
+            <div className="mt-5 flex flex-wrap gap-2">
+              <Badge tone={campaign.status === "active" ? "success" : "muted"}>{campaign.status}</Badge>
+              <Badge tone="muted">{overview.planning_summary.total_drafts} drafts</Badge>
+              <Badge tone="muted">{overview.assets.length} assets</Badge>
+              {overview.brief?.channels.slice(0, 3).map((channel) => (
+                <Badge key={channel}>{channel}</Badge>
+              ))}
+            </div>
+
+            <div className="mt-6 grid gap-3 md:grid-cols-3">
+              <WorkspaceSummaryCard
+                hint="Ideas, active drafts, and revisions still in progress."
+                label="Backlog"
+                value={overview.planning_summary.idea_count + overview.planning_summary.draft_count + overview.planning_summary.rejected_count}
+              />
+              <WorkspaceSummaryCard
+                hint="Pieces sitting with reviewers right now."
+                label="Awaiting Review"
+                value={overview.planning_summary.in_review_count}
+              />
+              <WorkspaceSummaryCard
+                hint="Earliest scheduled publish date across the campaign."
+                label="Next Publish"
+                value={overview.planning_summary.next_planned_publish_at ? formatDateTime(overview.planning_summary.next_planned_publish_at) : "Not set"}
+              />
+            </div>
+          </div>
+
+          <div className="rounded-[1.5rem] border border-border bg-white/85 p-5">
+            <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Quick actions</p>
+            <h3 className="mt-2 text-xl font-semibold tracking-tight">Jump to the next planning move</h3>
+            <div className="mt-5 grid gap-2">
+              <QuickAction href="#campaign-brief" label="Refine the campaign brief" />
+              <QuickAction href="#campaign-composer" label="Create or update a working draft" />
+              <QuickAction href="#campaign-planner" label="Organize drafts in the planner" />
+              <QuickAction href="#campaign-assets" label="Review the asset library" />
+            </div>
+
+            <div className="mt-5 rounded-[1.25rem] bg-muted/60 px-4 py-4">
+              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Coverage</p>
+              <p className="mt-2 text-sm leading-6 text-foreground">
+                {overview.brief?.channels.length
+                  ? `Planned channels: ${overview.brief.channels.join(", ")}.`
+                  : "No channels are defined in the brief yet."}
+              </p>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                {campaign.audience ? `Audience: ${campaign.audience}` : "Audience definition is still blank."}
+              </p>
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard label="Drafts" value={overview.drafts.length} />
         <MetricCard label="Assets" value={overview.assets.length} />
         <MetricCard label="Scheduled" value={overview.schedule.length} />
@@ -324,7 +415,7 @@ export function CampaignOverviewPage() {
       </div>
 
       <div className="mt-8 grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
-        <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
+        <Card className="scroll-mt-24 border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5" id="campaign-brief">
           <div className="flex items-center justify-between gap-4">
             <div>
               <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Content brief</p>
@@ -333,10 +424,19 @@ export function CampaignOverviewPage() {
             {overview.brief ? <Badge tone="success">Saved</Badge> : <Badge tone="warning">Draft</Badge>}
           </div>
 
-          <div className="mt-4 rounded-[1.25rem] border border-border bg-white/80 p-4">
-            <p className="text-sm text-muted-foreground">{campaign.objective ?? "Objective not set yet."}</p>
-            <p className="mt-2 text-sm text-muted-foreground">{campaign.audience ?? "Audience not set yet."}</p>
-          </div>
+          {campaign.objective || campaign.audience ? (
+            <div className="mt-4 rounded-[1.25rem] border border-border bg-white/80 p-4">
+              <p className="text-sm text-muted-foreground">{campaign.objective ?? "Objective not set yet."}</p>
+              <p className="mt-2 text-sm text-muted-foreground">{campaign.audience ?? "Audience not set yet."}</p>
+            </div>
+          ) : (
+            <div className="mt-4 rounded-[1.25rem] border border-dashed border-border bg-white/80 p-4">
+              <p className="text-sm font-medium text-foreground">Start by setting the core brief signal</p>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                Add an objective, audience, and channel plan so creators know what this campaign needs to achieve before the copy starts branching into channel-specific drafts.
+              </p>
+            </div>
+          )}
 
           <form
             className="mt-5 space-y-4"
@@ -404,7 +504,7 @@ export function CampaignOverviewPage() {
         </Card>
 
         <div className="space-y-6">
-          <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
+          <Card className="scroll-mt-24 border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5" id="campaign-composer">
             <div className="flex items-center justify-between gap-4">
               <div>
                 <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Draft pipeline</p>
@@ -495,7 +595,7 @@ export function CampaignOverviewPage() {
       </div>
 
       <div className="mt-8 grid gap-6 xl:grid-cols-[1.02fr_0.98fr]">
-        <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
+        <Card className="scroll-mt-24 border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5" id="campaign-assets">
           <div className="flex items-center justify-between gap-4">
             <div>
               <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Asset library</p>
@@ -719,132 +819,63 @@ export function CampaignOverviewPage() {
         />
       </div>
 
-      <div className="mt-8 grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+      <div className="mt-8 scroll-mt-24" id="campaign-planner">
+        <CampaignPlanner
+          currentUserRole={currentMembership?.role}
+          drafts={overview.drafts}
+          isMovingDraftId={moveDraftStageMutation.variables?.draft.id ?? null}
+          onMoveDraft={(draft, targetStatus) => moveDraftStageMutation.mutate({ draft, targetStatus })}
+          planningSummary={overview.planning_summary}
+          schedule={overview.schedule}
+        />
+        {moveDraftStageMutation.error ? (
+          <div className="mt-4">
+            <MutationFeedback error={moveDraftStageMutation.error} />
+          </div>
+        ) : null}
+      </div>
+
+      <div className="mt-8">
         <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
           <div className="flex items-center justify-between gap-4">
             <div>
-              <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Drafts</p>
-              <h2 className="mt-2 text-2xl font-semibold tracking-tight">Campaign working set</h2>
+              <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Campaign activity</p>
+              <h2 className="mt-2 text-2xl font-semibold tracking-tight">Collaboration feed</h2>
             </div>
-            <Badge tone="muted">{overview.drafts.length} total</Badge>
+            <Badge tone="muted">{overview.activity_timeline.length} events</Badge>
           </div>
 
           <div className="mt-5 space-y-3">
-            {overview.drafts.length ? (
-              overview.drafts.map((draft) => (
-                <Link
-                  key={draft.id}
-                  className="block rounded-[1.25rem] border border-border bg-white/80 px-4 py-4 transition hover:bg-white"
-                  to={`/drafts/${draft.id}`}
-                >
-                  <div className="flex flex-wrap items-center gap-3">
-                    <h3 className="text-base font-semibold">{draft.title}</h3>
-                    <Badge>{draft.platform}</Badge>
-                    <Badge tone={draft.status === "in_review" ? "warning" : draft.status === "approved" ? "success" : "muted"}>
-                      {formatStatusLabel(draft.status)}
-                    </Badge>
-                    <Badge tone="muted">{draft.review_count} reviews</Badge>
-                  </div>
-                  <p className="mt-2 text-sm text-muted-foreground">{draft.content_type}</p>
-                  {draft.latest_review_action ? (
-                    <p className="mt-3 text-sm text-muted-foreground">
-                      Latest review: {formatActionLabel(draft.latest_review_action)} · {formatDateTime(draft.latest_reviewed_at)}
+            {overview.activity_timeline.length ? (
+              overview.activity_timeline.map((item) => {
+                const activity = describeActivity(item);
+                const href = activityHref(item);
+
+                return (
+                  <div key={item.id} className="rounded-[1.25rem] border border-border bg-white/80 px-4 py-4">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <Badge>{item.entity_type}</Badge>
+                      <p className="text-sm font-medium text-foreground">{activity.title}</p>
+                    </div>
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      {item.actor_name ?? "Unknown user"} · {formatDateTime(item.created_at)}
                     </p>
-                  ) : null}
-                  <p className="mt-3 text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                    Updated {formatDateTime(draft.updated_at)}
-                  </p>
-                </Link>
-              ))
+                    {activity.detail ? <p className="mt-3 text-sm leading-6 text-foreground">{activity.detail}</p> : null}
+                    {href ? (
+                      <Link className="mt-4 inline-flex text-sm font-medium text-primary" to={href}>
+                        Open linked item
+                      </Link>
+                    ) : null}
+                  </div>
+                );
+              })
             ) : (
               <p className="rounded-[1.25rem] border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
-                No drafts yet. Create the first working draft for this campaign above.
+                Campaign activity will appear here once drafts begin moving through review.
               </p>
             )}
           </div>
         </Card>
-
-        <div className="space-y-6">
-          <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Schedule</p>
-                <h2 className="mt-2 text-2xl font-semibold tracking-tight">Upcoming items</h2>
-              </div>
-              <Link className="text-sm font-medium text-primary" to="/calendar">
-                Open calendar
-              </Link>
-            </div>
-
-            <div className="mt-5 space-y-3">
-              {overview.schedule.length ? (
-                overview.schedule.slice(0, 6).map((item) => (
-                  <Link
-                    key={item.id}
-                    className="block rounded-[1.25rem] border border-border bg-white/80 px-4 py-4 transition hover:bg-white"
-                    to={item.draft_id ? `/drafts/${item.draft_id}` : `/campaigns/${item.campaign_id}`}
-                  >
-                    <div className="flex flex-wrap items-center gap-3">
-                      <h3 className="text-base font-semibold">{item.title}</h3>
-                      <Badge tone={item.draft_id ? "success" : "muted"}>{item.item_type}</Badge>
-                      {item.platform ? <Badge tone="muted">{item.platform}</Badge> : null}
-                    </div>
-                    <p className="mt-2 text-sm text-muted-foreground">
-                      {formatDateTime(item.scheduled_for)}
-                      {item.draft_title ? ` · ${item.draft_title}` : ""}
-                    </p>
-                    {item.notes ? <p className="mt-3 text-sm text-muted-foreground">{item.notes}</p> : null}
-                  </Link>
-                ))
-              ) : (
-                <p className="rounded-[1.25rem] border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
-                  Draft publish dates and campaign milestones will appear here once they are scheduled.
-                </p>
-              )}
-            </div>
-          </Card>
-
-          <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Campaign activity</p>
-                <h2 className="mt-2 text-2xl font-semibold tracking-tight">Collaboration feed</h2>
-              </div>
-              <Badge tone="muted">{overview.activity_timeline.length} events</Badge>
-            </div>
-
-            <div className="mt-5 space-y-3">
-              {overview.activity_timeline.length ? (
-                overview.activity_timeline.map((item) => {
-                  const activity = describeActivity(item);
-                  const href = activityHref(item);
-
-                  return (
-                    <div key={item.id} className="rounded-[1.25rem] border border-border bg-white/80 px-4 py-4">
-                      <div className="flex flex-wrap items-center gap-3">
-                        <Badge>{item.entity_type}</Badge>
-                        <p className="text-sm font-medium text-foreground">{activity.title}</p>
-                      </div>
-                      <p className="mt-2 text-sm text-muted-foreground">
-                        {item.actor_name ?? "Unknown user"} · {formatDateTime(item.created_at)}
-                      </p>
-                      {activity.detail ? <p className="mt-3 text-sm leading-6 text-foreground">{activity.detail}</p> : null}
-                      {href ? (
-                        <Link className="mt-4 inline-flex text-sm font-medium text-primary" to={href}>
-                          Open linked item
-                        </Link>
-                      ) : null}
-                    </div>
-                  );
-                })
-              ) : (
-                <p className="rounded-[1.25rem] border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
-                  Campaign activity will appear here once drafts begin moving through review.
-                </p>
-              )}
-            </div>
-          </Card>
-        </div>
       </div>
     </div>
   );
@@ -865,6 +896,35 @@ function MetricCard({ label, value }: { label: string; value: string | number })
       <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">{label}</p>
       <p className="mt-4 text-2xl font-semibold tracking-tight">{value}</p>
     </Card>
+  );
+}
+
+function WorkspaceSummaryCard({
+  hint,
+  label,
+  value,
+}: {
+  hint: string;
+  label: string;
+  value: string | number;
+}) {
+  return (
+    <div className="rounded-[1.25rem] border border-border bg-white/80 px-4 py-4">
+      <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">{label}</p>
+      <p className="mt-3 text-2xl font-semibold tracking-tight">{value}</p>
+      <p className="mt-3 text-sm leading-6 text-muted-foreground">{hint}</p>
+    </div>
+  );
+}
+
+function QuickAction({ href, label }: { href: string; label: string }) {
+  return (
+    <a
+      className="block rounded-[1.15rem] border border-border bg-muted/40 px-4 py-3 text-sm font-medium text-foreground transition hover:bg-white"
+      href={href}
+    >
+      {label}
+    </a>
   );
 }
 

@@ -7,7 +7,7 @@ from app.db.session import get_db
 from app.models.user import User
 from app.schemas.assignment import AssignmentCreate, AssignmentRead
 from app.schemas.collaboration_comment import CollaborationCommentCreate, CollaborationCommentRead
-from app.schemas.content_draft import ContentDraftCreate, ContentDraftRead, ContentDraftUpdate
+from app.schemas.content_draft import ContentDraftCreate, ContentDraftRead, ContentDraftStageMove, ContentDraftUpdate
 from app.schemas.draft_version import DraftVersionRead
 from app.schemas.draft_review import (
     DraftReviewCreate,
@@ -27,6 +27,7 @@ from app.services.reviews import (
     resubmit_draft,
     submit_draft_for_review,
 )
+from app.services.draft_stage_moves import move_draft_stage
 
 router = APIRouter()
 
@@ -218,6 +219,19 @@ def resubmit_draft_route(
 ) -> ContentDraftRead:
     try:
         return resubmit_draft(db, draft_id=draft_id, payload=payload, user=current_user)
+    except Exception as exc:
+        _raise_service_error(exc)
+
+
+@router.post("/{draft_id}/move-stage", response_model=ContentDraftRead)
+def move_draft_stage_route(
+    draft_id: int,
+    payload: ContentDraftStageMove,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ContentDraftRead:
+    try:
+        return move_draft_stage(db, draft_id=draft_id, payload=payload, user=current_user)
     except Exception as exc:
         _raise_service_error(exc)
 

@@ -18,7 +18,7 @@ from app.schemas.audit_log import AuditLogRead
 from app.schemas.calendar_item import CalendarItemRead
 from app.schemas.campaign import CampaignCreate, CampaignRead, CampaignUpdate
 from app.schemas.campaign_asset import CampaignAssetRead
-from app.schemas.campaign_workspace import CampaignOverviewRead
+from app.schemas.campaign_workspace import CampaignOverviewRead, CampaignPlanningSummaryRead
 from app.schemas.content_brief import ContentBriefRead
 from app.schemas.content_draft import ContentDraftRead, DraftStatusCount
 from app.schemas.draft_version import DraftVersionRead
@@ -253,6 +253,10 @@ def get_campaign_overview(db: Session, *, campaign_id: int, user: User) -> Campa
     campaign, _ = _get_campaign_with_role(db, campaign_id=campaign_id, user_id=user.id)
     ordered_drafts = sorted(campaign.drafts, key=lambda draft: draft.created_at, reverse=True)
     status_counts = Counter(_coerce_draft_status(draft.status) for draft in ordered_drafts)
+    next_planned_publish_at = min(
+        (draft.planned_publish_at for draft in ordered_drafts if draft.planned_publish_at is not None),
+        default=None,
+    )
     recent_versions = db.scalars(
         select(DraftVersion)
         .join(ContentDraft, ContentDraft.id == DraftVersion.draft_id)
@@ -284,6 +288,17 @@ def get_campaign_overview(db: Session, *, campaign_id: int, user: User) -> Campa
             DraftStatusCount(status=status, count=status_counts.get(status, 0))
             for status in DraftStatus
         ],
+        planning_summary=CampaignPlanningSummaryRead(
+            total_drafts=len(ordered_drafts),
+            idea_count=status_counts.get(DraftStatus.IDEA, 0),
+            draft_count=status_counts.get(DraftStatus.DRAFT, 0),
+            in_review_count=status_counts.get(DraftStatus.IN_REVIEW, 0),
+            approved_count=status_counts.get(DraftStatus.APPROVED, 0),
+            scheduled_count=status_counts.get(DraftStatus.SCHEDULED, 0),
+            published_count=status_counts.get(DraftStatus.PUBLISHED, 0),
+            rejected_count=status_counts.get(DraftStatus.REJECTED, 0),
+            next_planned_publish_at=next_planned_publish_at,
+        ),
         activity_timeline=activity_timeline,
     )
 

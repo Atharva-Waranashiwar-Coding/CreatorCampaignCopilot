@@ -1,8 +1,10 @@
 import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
+import { EditorToolbar } from "../components/draft-editor/editor-toolbar";
+import { PlatformPreview } from "../components/draft-preview/platform-preview";
 import { AssignmentPanel } from "../components/collaboration/assignment-panel";
 import { ThreadedCommentsCard } from "../components/collaboration/threaded-comments-card";
 import { PageHeader } from "../components/shared/page-header";
@@ -47,6 +49,7 @@ export function DraftDetailPage() {
   const currentUser = useAuthStore((state) => state.user);
   const [form, setForm] = useState<DraftFormState | null>(null);
   const [reviewNote, setReviewNote] = useState("");
+  const bodyTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const draftQuery = useQuery({
     queryKey: ["draft", draftId],
@@ -221,6 +224,43 @@ export function DraftDetailPage() {
   const assignments = assignmentsQuery.data ?? [];
   const availableActions = reviewThread?.available_actions ?? [];
 
+  const insertEditorSnippet = (snippet: string) => {
+    setForm((current) => {
+      if (!current) {
+        return current;
+      }
+
+      const textarea = bodyTextareaRef.current;
+      const currentValue = current.content_body;
+
+      if (!textarea) {
+        return {
+          ...current,
+          content_body: currentValue ? `${currentValue}\n${snippet}` : snippet,
+        };
+      }
+
+      const selectionStart = textarea.selectionStart ?? currentValue.length;
+      const selectionEnd = textarea.selectionEnd ?? currentValue.length;
+      const before = currentValue.slice(0, selectionStart);
+      const after = currentValue.slice(selectionEnd);
+      const prefix = before && !before.endsWith("\n") ? "\n" : "";
+      const suffix = after && !after.startsWith("\n") ? "\n" : "";
+      const nextValue = `${before}${prefix}${snippet}${suffix}${after}`;
+      const caretPosition = `${before}${prefix}${snippet}`.length;
+
+      window.requestAnimationFrame(() => {
+        textarea.focus();
+        textarea.setSelectionRange(caretPosition, caretPosition);
+      });
+
+      return {
+        ...current,
+        content_body: nextValue,
+      };
+    });
+  };
+
   if (draftQuery.isLoading || reviewThreadQuery.isLoading || versionsQuery.isLoading || !draft || !form || !reviewThread) {
     return (
       <Card className="border-white/70 bg-white/85 p-8 shadow-xl shadow-slate-900/5">
@@ -300,13 +340,17 @@ export function DraftDetailPage() {
             </Field>
 
             <Field label="Draft body">
-              <Textarea
-                className="min-h-[260px]"
-                value={form.content_body}
-                onChange={(event) =>
-                  setForm((current) => (current ? { ...current, content_body: event.target.value } : current))
-                }
-              />
+              <div className="space-y-3">
+                <EditorToolbar onInsert={insertEditorSnippet} value={form.content_body} />
+                <Textarea
+                  ref={bodyTextareaRef}
+                  className="min-h-[260px]"
+                  value={form.content_body}
+                  onChange={(event) =>
+                    setForm((current) => (current ? { ...current, content_body: event.target.value } : current))
+                  }
+                />
+              </div>
             </Field>
 
             <MutationFeedback error={updateMutation.error || deleteMutation.error} />
@@ -332,6 +376,19 @@ export function DraftDetailPage() {
         </Card>
 
         <div className="space-y-6">
+          <PlatformPreview
+            input={{
+              brandName: draft.brand_name,
+              campaignName: draft.campaign_name,
+              contentBody: form.content_body,
+              contentType: form.content_type,
+              plannedPublishAt: form.planned_publish_at,
+              platform: form.platform,
+              status: draft.status,
+              title: form.title,
+            }}
+          />
+
           <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
             <div className="flex items-center justify-between gap-4">
               <div>

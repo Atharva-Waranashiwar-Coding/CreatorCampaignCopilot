@@ -24,6 +24,11 @@ class ContentDraftUpdate(BaseModel):
     planned_publish_at: datetime | None = None
 
 
+class ContentDraftStageMove(BaseModel):
+    target_status: DraftStatus
+    comment: str | None = Field(default=None, max_length=5000)
+
+
 class ContentDraftRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
