@@ -141,6 +141,8 @@ class ReviewCommentSummary(BaseModel):
 class SummarizeReviewFeedbackResponse(BaseModel):
     draft_id: int
     draft_title: str
+    brand_id: int
+    brand_name: str
     current_status: DraftStatus
     current_user_role: BrandRole
     review_count: int

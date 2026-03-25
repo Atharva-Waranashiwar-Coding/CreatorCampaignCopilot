@@ -429,6 +429,8 @@ def summarize_review_feedback(
     return SummarizeReviewFeedbackResponse(
         draft_id=draft.id,
         draft_title=draft.title,
+        brand_id=draft.brand_id,
+        brand_name=draft.brand_name,
         current_status=draft.status,
         current_user_role=review_thread.current_user_role,
         review_count=len(review_thread.reviews),

@@ -55,3 +55,9 @@ class Brand(TimestampMixin, Base):
         lazy="selectin",
         order_by="ContentTemplate.updated_at.desc()",
     )
+    tool_usage_logs: Mapped[list["ToolUsageLog"]] = relationship(
+        back_populates="brand",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+        order_by="ToolUsageLog.created_at.desc()",
+    )

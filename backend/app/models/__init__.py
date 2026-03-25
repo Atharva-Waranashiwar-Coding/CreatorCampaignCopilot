@@ -12,6 +12,7 @@ from app.models.draft_review import DraftReview
 from app.models.draft_version import DraftVersion
 from app.models.plan import Plan
 from app.models.project import Project
+from app.models.tool_usage_log import ToolUsageLog
 from app.models.user import User
 
 __all__ = [
@@ -29,5 +30,6 @@ __all__ = [
     "DraftVersion",
     "Plan",
     "Project",
+    "ToolUsageLog",
     "User",
 ]
