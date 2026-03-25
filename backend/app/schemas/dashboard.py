@@ -92,6 +92,7 @@ class DashboardRevisionCycleItem(BaseModel):
     revision_cycle_count: int
     rejection_count: int
     status: str
+    status_label: str
 
 
 class DashboardApprovalAnalytics(BaseModel):

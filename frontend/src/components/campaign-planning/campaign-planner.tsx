@@ -2,7 +2,14 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { formatDateTime } from "../../lib/format";
-import type { BrandRole, CampaignPlanningSummary, CalendarItem, ContentDraft } from "../../lib/types";
+import type {
+  BrandRole,
+  CampaignDependency,
+  CampaignPlanningSummary,
+  CalendarItem,
+  ContentDraft,
+  DraftWorkflow,
+} from "../../lib/types";
 import { Badge } from "../ui/badge";
 import { Card } from "../ui/card";
 import { CampaignBoardView } from "./campaign-board-view";
@@ -29,23 +36,39 @@ const plannerViews: Array<{ description: string; id: PlannerView; label: string 
 ];
 
 type CampaignPlannerProps = {
+  dependencies: CampaignDependency[];
   currentUserRole?: BrandRole;
   drafts: ContentDraft[];
   isMovingDraftId?: number | null;
   onMoveDraft?: (draft: ContentDraft, targetStatus: ContentDraft["status"]) => void;
   planningSummary: CampaignPlanningSummary;
   schedule: CalendarItem[];
+  workflow: DraftWorkflow;
 };
 
 export function CampaignPlanner({
+  dependencies,
   currentUserRole,
   drafts,
   isMovingDraftId = null,
   onMoveDraft,
   planningSummary,
   schedule,
+  workflow,
 }: CampaignPlannerProps) {
   const [view, setView] = useState<PlannerView>("board");
+  const blockedReasonsByDraftId = useMemo(() => {
+    return dependencies
+      .filter((dependency) => !dependency.is_satisfied && dependency.dependent_type === "draft_stage" && dependency.dependent_draft_id)
+      .reduce<Record<number, string[]>>((accumulator, dependency) => {
+        const draftId = dependency.dependent_draft_id;
+        if (!draftId) {
+          return accumulator;
+        }
+        accumulator[draftId] = [...(accumulator[draftId] ?? []), dependency.blocker_label];
+        return accumulator;
+      }, {});
+  }, [dependencies]);
 
   const summaryCards = useMemo(
     () => [
@@ -82,7 +105,7 @@ export function CampaignPlanner({
           <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Planning workspace</p>
           <h2 className="mt-2 text-2xl font-semibold tracking-tight">Campaign planner</h2>
           <p className="mt-3 max-w-3xl text-sm leading-6 text-muted-foreground">
-            Switch between board, list, and calendar views without leaving the campaign workspace. Board moves follow the existing editorial workflow and draft review rules.
+            Switch between board, list, and calendar views without leaving the campaign workspace. Board moves follow the brand's configured editorial workflow and draft review rules.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -128,10 +151,12 @@ export function CampaignPlanner({
       <div className="mt-6">
         {view === "board" ? (
           <CampaignBoardView
+            blockedReasonsByDraftId={blockedReasonsByDraftId}
             currentUserRole={currentUserRole}
             drafts={drafts}
             isMovingDraftId={isMovingDraftId}
             onMoveDraft={onMoveDraft}
+            workflow={workflow}
           />
         ) : null}
 
@@ -139,7 +164,12 @@ export function CampaignPlanner({
           drafts.length ? (
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
               {drafts.map((draft) => (
-                <DraftBoardCard key={draft.id} className="h-full" draft={draft} />
+                <DraftBoardCard
+                  key={draft.id}
+                  blockedLabels={blockedReasonsByDraftId[draft.id] ?? []}
+                  className="h-full"
+                  draft={draft}
+                />
               ))}
             </div>
           ) : (

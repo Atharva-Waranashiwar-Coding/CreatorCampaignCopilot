@@ -27,8 +27,12 @@ export function formatDate(value: string | null | undefined) {
   }).format(parseDateValue(value));
 }
 
-export function formatStatusLabel(value: string) {
-  return value.replace(/_/g, " ");
+export function formatStatusLabel(value: string, explicitLabel?: string | null) {
+  if (explicitLabel?.trim()) {
+    return explicitLabel;
+  }
+
+  return value.replace(/[_-]/g, " ");
 }
 
 export function formatActionLabel(value: string) {

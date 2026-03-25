@@ -10,17 +10,7 @@ import { Select } from "../components/ui/select";
 import { useAuthStore } from "../features/auth/auth-store";
 import { apiRequest } from "../lib/api";
 import { formatActionLabel, formatDateTime, formatStatusLabel } from "../lib/format";
-import type { Campaign, ContentDraft, DraftStatus } from "../lib/types";
-
-const statusOptions: DraftStatus[] = [
-  "idea",
-  "draft",
-  "in_review",
-  "approved",
-  "scheduled",
-  "published",
-  "rejected",
-];
+import type { Brand, Campaign, ContentDraft } from "../lib/types";
 
 export function DraftsPage() {
   const token = useAuthStore((state) => state.token);
@@ -32,6 +22,10 @@ export function DraftsPage() {
   const campaignsQuery = useQuery({
     queryKey: ["campaigns"],
     queryFn: () => apiRequest<Campaign[]>("/campaigns", {}, token),
+  });
+  const brandsQuery = useQuery({
+    queryKey: ["brands"],
+    queryFn: () => apiRequest<Brand[]>("/brands", {}, token),
   });
 
   const draftsQuery = useQuery({
@@ -62,6 +56,26 @@ export function DraftsPage() {
     );
     return Array.from(items).sort((a, b) => a.localeCompare(b));
   }, [draftsQuery.data]);
+
+  const statusOptions = useMemo(() => {
+    const selectedCampaign = campaignsQuery.data?.find((campaign) => String(campaign.id) === campaignFilter);
+    const workflows = selectedCampaign
+      ? brandsQuery.data?.filter((brand) => brand.id === selectedCampaign.brand_id).map((brand) => brand.draft_workflow) ?? []
+      : brandsQuery.data?.map((brand) => brand.draft_workflow) ?? [];
+
+    const seen = new Set<string>();
+    const options: Array<{ key: string; label: string }> = [];
+    workflows.forEach((workflow) => {
+      workflow.stages.forEach((stage) => {
+        if (seen.has(stage.key)) {
+          return;
+        }
+        seen.add(stage.key);
+        options.push({ key: stage.key, label: stage.label });
+      });
+    });
+    return options;
+  }, [brandsQuery.data, campaignFilter, campaignsQuery.data]);
 
   return (
     <div>
@@ -102,8 +116,8 @@ export function DraftsPage() {
           <Select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
             <option value="all">All statuses</option>
             {statusOptions.map((status) => (
-              <option key={status} value={status}>
-                {formatStatusLabel(status)}
+              <option key={status.key} value={status.key}>
+                {formatStatusLabel(status.key, status.label)}
               </option>
             ))}
           </Select>
@@ -125,8 +139,8 @@ export function DraftsPage() {
                 <div className="flex flex-wrap items-center gap-3">
                   <h3 className="text-base font-semibold">{draft.title}</h3>
                   <Badge>{draft.platform}</Badge>
-                  <Badge tone={draft.status === "in_review" ? "warning" : draft.status === "approved" ? "success" : "muted"}>
-                    {formatStatusLabel(draft.status)}
+                  <Badge tone={draft.status_type === "review" ? "warning" : draft.status_type === "approved" || draft.status_type === "published" ? "success" : "muted"}>
+                    {formatStatusLabel(draft.status, draft.status_label)}
                   </Badge>
                   <Badge tone="muted">{draft.review_count} reviews</Badge>
                 </div>

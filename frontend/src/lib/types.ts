@@ -2,17 +2,25 @@ export type BrandRole = "owner" | "admin" | "editor" | "reviewer" | "viewer";
 export type MembershipStatus = "invited" | "active" | "suspended";
 export type ProjectStatus = "active" | "archived";
 export type CampaignStatus = "planning" | "active" | "completed" | "archived";
+export type CampaignMilestoneKey =
+  | "brief_approved"
+  | "first_drafts_ready"
+  | "all_reviews_complete"
+  | "campaign_launch_ready"
+  | "campaign_completed";
+export type CampaignDependencyNodeType = "campaign_milestone" | "draft_stage";
 export type CommentEntityType = "campaign" | "draft";
 export type AssignmentEntityType = "campaign" | "draft" | "review_task";
 export type AssignmentStatus = "open" | "completed" | "canceled";
-export type DraftStatus =
-  | "idea"
-  | "draft"
-  | "in_review"
+export type DraftStageType =
+  | "backlog"
+  | "in_progress"
+  | "review"
   | "approved"
   | "scheduled"
   | "published"
-  | "rejected";
+  | "changes_requested";
+export type DraftStatus = string;
 export type DraftReviewAction =
   | "commented"
   | "submitted"
@@ -56,6 +64,7 @@ export type Brand = {
   created_by: number;
   created_at: string;
   updated_at: string;
+  draft_workflow: DraftWorkflow;
   current_user_role: BrandRole;
   membership_count: number;
   project_count: number;
@@ -136,6 +145,9 @@ export type ContentDraft = {
   content_type: string;
   content_body: string | null;
   status: DraftStatus;
+  status_label: string;
+  status_type: DraftStageType;
+  status_color: string;
   planned_publish_at: string | null;
   current_version_number: number;
   created_by: number;
@@ -225,6 +237,9 @@ export type DraftVersion = {
   content_type: string;
   content_body: string | null;
   status: DraftStatus;
+  status_label: string;
+  status_type: DraftStageType;
+  status_color: string;
   planned_publish_at: string | null;
   change_summary: string | null;
   created_by: number;
@@ -262,7 +277,9 @@ export type DraftReview = {
   mentions: Mention[];
   version_number: number;
   from_status: DraftStatus | null;
+  from_status_label: string | null;
   to_status: DraftStatus | null;
+  to_status_label: string | null;
   created_at: string;
 };
 
@@ -273,9 +290,31 @@ export type DraftReviewThread = {
   reviews: DraftReview[];
 };
 
-export type DraftStatusCount = {
+export type DraftWorkflowStageCount = {
   status: DraftStatus;
+  status_label: string;
+  status_type: DraftStageType;
   count: number;
+};
+
+export type DraftWorkflowStage = {
+  key: string;
+  label: string;
+  stage_type: DraftStageType;
+  color: string;
+  description: string | null;
+  is_initial: boolean;
+  allowed_next_stage_keys: string[];
+};
+
+export type DraftWorkflow = {
+  stages: DraftWorkflowStage[];
+  initial_stage_keys: string[];
+  review_stage_key: string;
+  approved_stage_key: string;
+  changes_requested_stage_key: string;
+  scheduled_stage_key: string | null;
+  published_stage_key: string;
 };
 
 export type CampaignPlanningSummary = {
@@ -292,14 +331,54 @@ export type CampaignPlanningSummary = {
 
 export type CampaignOverview = {
   campaign: Campaign;
+  draft_workflow: DraftWorkflow;
   brief: ContentBrief | null;
   drafts: ContentDraft[];
   assets: CampaignAsset[];
+  milestones: CampaignMilestone[];
+  dependencies: CampaignDependency[];
   recent_versions: DraftVersion[];
   schedule: CalendarItem[];
-  status_breakdown: DraftStatusCount[];
+  status_breakdown: DraftWorkflowStageCount[];
   planning_summary: CampaignPlanningSummary;
   activity_timeline: AuditLog[];
+};
+
+export type CampaignMilestone = {
+  id: number;
+  campaign_id: number;
+  key: CampaignMilestoneKey;
+  label: string;
+  sort_order: number;
+  target_date: string | null;
+  completed_at: string | null;
+  completed_by_user_id: number | null;
+  completed_by_name: string | null;
+  is_complete: boolean;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CampaignDependency = {
+  id: number;
+  campaign_id: number;
+  dependent_type: CampaignDependencyNodeType;
+  dependent_milestone_id: number | null;
+  dependent_draft_id: number | null;
+  dependent_stage_key: string | null;
+  dependent_label: string;
+  blocker_type: CampaignDependencyNodeType;
+  blocker_milestone_id: number | null;
+  blocker_draft_id: number | null;
+  blocker_stage_key: string | null;
+  blocker_label: string;
+  note: string | null;
+  created_by: number;
+  creator_name: string | null;
+  is_satisfied: boolean;
+  created_at: string;
+  updated_at: string;
 };
 
 export type AuditLog = {
@@ -401,6 +480,7 @@ export type DashboardRevisionCycleItem = {
   revision_cycle_count: number;
   rejection_count: number;
   status: DraftStatus;
+  status_label: string;
 };
 
 export type DashboardApprovalAnalytics = {

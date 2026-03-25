@@ -22,14 +22,14 @@ import type {
   Assignment,
   AuditLog,
   CampaignAsset,
+  CampaignDependency,
+  CampaignMilestone,
   CampaignOverview,
   CollaborationComment,
   ContentDraft,
   DraftStatus,
   Membership,
 } from "../lib/types";
-
-const draftStatuses: DraftStatus[] = ["idea", "draft", "in_review"];
 
 type BriefFormState = {
   key_message: string;
@@ -59,6 +59,22 @@ type AssetFormState = {
   notes: string;
 };
 
+type MilestoneFormState = {
+  target_date: string;
+  notes: string;
+};
+
+type DependencyFormState = {
+  dependent_node: string;
+  blocker_node: string;
+  note: string;
+};
+
+type DependencyNodeOption = {
+  value: string;
+  label: string;
+};
+
 const emptyBriefForm: BriefFormState = {
   key_message: "",
   call_to_action: "",
@@ -66,15 +82,6 @@ const emptyBriefForm: BriefFormState = {
   channels: "",
   themes: "",
   references: "",
-};
-
-const emptyDraftForm: DraftFormState = {
-  title: "",
-  platform: "",
-  content_type: "",
-  content_body: "",
-  status: "draft",
-  planned_publish_at: "",
 };
 
 const emptyAssetForm: AssetFormState = {
@@ -87,14 +94,22 @@ const emptyAssetForm: AssetFormState = {
   notes: "",
 };
 
+const emptyDependencyForm: DependencyFormState = {
+  dependent_node: "",
+  blocker_node: "",
+  note: "",
+};
+
 export function CampaignOverviewPage() {
   const { campaignId } = useParams();
   const token = useAuthStore((state) => state.token);
   const currentUser = useAuthStore((state) => state.user);
   const [briefForm, setBriefForm] = useState<BriefFormState>(emptyBriefForm);
-  const [draftForm, setDraftForm] = useState<DraftFormState>(emptyDraftForm);
+  const [draftForm, setDraftForm] = useState<DraftFormState>(buildEmptyDraftForm("draft"));
   const [assetForm, setAssetForm] = useState<AssetFormState>(emptyAssetForm);
   const [editingAssetId, setEditingAssetId] = useState<number | null>(null);
+  const [milestoneForms, setMilestoneForms] = useState<Record<number, MilestoneFormState>>({});
+  const [dependencyForm, setDependencyForm] = useState<DependencyFormState>(emptyDependencyForm);
 
   const overviewQuery = useQuery({
     queryKey: ["campaign-overview", campaignId],
@@ -123,6 +138,23 @@ export function CampaignOverviewPage() {
   const overview = overviewQuery.data;
   const campaign = overview?.campaign;
   const currentMembership = membershipsQuery.data?.find((membership) => membership.user_id === currentUser?.id) ?? null;
+  const workflow = overview?.draft_workflow;
+  const defaultDraftStatus = workflow?.initial_stage_keys[0] ?? workflow?.stages[0]?.key ?? "draft";
+  const draftCreateStages =
+    workflow?.stages.filter((stage) => workflow.initial_stage_keys.includes(stage.key)).length
+      ? workflow.stages.filter((stage) => workflow.initial_stage_keys.includes(stage.key))
+      : workflow?.stages ?? [];
+  const canManageWorkflow = currentMembership ? ["owner", "admin", "editor"].includes(currentMembership.role) : false;
+  const unresolvedDependencies = overview?.dependencies.filter((dependency) => !dependency.is_satisfied) ?? [];
+  const blockedDraftReasons = buildDraftBlockerMap(unresolvedDependencies);
+  const blockedMilestoneReasons = buildMilestoneBlockerMap(unresolvedDependencies);
+  const dependencyNodeOptions = overview
+    ? buildDependencyNodeOptions({
+        drafts: overview.drafts,
+        milestones: overview.milestones,
+        workflow: overview.draft_workflow,
+      })
+    : [];
 
   useEffect(() => {
     if (!overview?.brief) {
@@ -139,6 +171,38 @@ export function CampaignOverviewPage() {
       references: overview.brief.references ?? "",
     });
   }, [overview?.brief]);
+
+  useEffect(() => {
+    setDraftForm((current) => {
+      if (workflow?.stages.some((stage) => stage.key === current.status)) {
+        return current;
+      }
+
+      return {
+        ...current,
+        status: defaultDraftStatus,
+      };
+    });
+  }, [defaultDraftStatus, workflow]);
+
+  useEffect(() => {
+    if (!overview?.milestones.length) {
+      setMilestoneForms({});
+      return;
+    }
+
+    setMilestoneForms(
+      Object.fromEntries(
+        overview.milestones.map((milestone) => [
+          milestone.id,
+          {
+            target_date: milestone.target_date ?? "",
+            notes: milestone.notes ?? "",
+          },
+        ]),
+      ),
+    );
+  }, [overview?.milestones]);
 
   const createOrUpdateBriefMutation = useMutation({
     mutationFn: () =>
@@ -195,7 +259,7 @@ export function CampaignOverviewPage() {
       queryClient.invalidateQueries({ queryKey: ["drafts"] });
       queryClient.invalidateQueries({ queryKey: ["campaigns"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
-      setDraftForm(emptyDraftForm);
+      setDraftForm(buildEmptyDraftForm(defaultDraftStatus));
     },
   });
 
@@ -316,6 +380,58 @@ export function CampaignOverviewPage() {
     },
   });
 
+  const updateMilestoneMutation = useMutation({
+    mutationFn: ({ milestoneId, payload }: { milestoneId: number; payload: Record<string, boolean | string | null> }) =>
+      apiRequest<CampaignMilestone>(
+        `/campaigns/${campaignId}/milestones/${milestoneId}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify(payload),
+        },
+        token,
+      ),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["campaign-overview", campaignId] });
+      await queryClient.invalidateQueries({ queryKey: ["campaigns"] });
+      await queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
+      await queryClient.invalidateQueries({ queryKey: ["calendar-items"] });
+    },
+  });
+
+  const createDependencyMutation = useMutation({
+    mutationFn: (payload: Record<string, number | string | null>) =>
+      apiRequest<CampaignDependency[]>(
+        `/campaigns/${campaignId}/dependencies`,
+        {
+          method: "POST",
+          body: JSON.stringify(payload),
+        },
+        token,
+      ),
+    onSuccess: async () => {
+      setDependencyForm(emptyDependencyForm);
+      await queryClient.invalidateQueries({ queryKey: ["campaign-overview", campaignId] });
+      await queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
+      await queryClient.invalidateQueries({ queryKey: ["drafts"] });
+    },
+  });
+
+  const deleteDependencyMutation = useMutation({
+    mutationFn: (dependencyId: number) =>
+      apiRequest<CampaignDependency[]>(
+        `/campaigns/${campaignId}/dependencies/${dependencyId}`,
+        {
+          method: "DELETE",
+        },
+        token,
+      ),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["campaign-overview", campaignId] });
+      await queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
+      await queryClient.invalidateQueries({ queryKey: ["drafts"] });
+    },
+  });
+
   if (overviewQuery.isLoading) {
     return <LoadingState label="Loading campaign workspace" />;
   }
@@ -388,6 +504,8 @@ export function CampaignOverviewPage() {
             <div className="mt-5 grid gap-2">
               <QuickAction href="#campaign-brief" label="Refine the campaign brief" />
               <QuickAction href="#campaign-composer" label="Create or update a working draft" />
+              <QuickAction href="#campaign-milestones" label="Track milestones" />
+              <QuickAction href="#campaign-dependencies" label="Review blockers and dependencies" />
               <QuickAction href="#campaign-planner" label="Organize drafts in the planner" />
               <QuickAction href="#campaign-assets" label="Review the asset library" />
             </div>
@@ -518,7 +636,9 @@ export function CampaignOverviewPage() {
             <div className="mt-5 grid gap-3 md:grid-cols-2">
               {overview.status_breakdown.map((item) => (
                 <div key={item.status} className="rounded-[1.25rem] border border-border bg-white/80 px-4 py-4">
-                  <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">{formatStatusLabel(item.status)}</p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge tone={statusTone(item.status_type)}>{item.status_label}</Badge>
+                  </div>
                   <p className="mt-3 text-3xl font-semibold tracking-tight">{item.count}</p>
                 </div>
               ))}
@@ -557,14 +677,14 @@ export function CampaignOverviewPage() {
                     onChange={(event) => setDraftForm((current) => ({ ...current, content_type: event.target.value }))}
                   />
                 </Field>
-                <Field label="Status">
+                <Field label="Starting stage">
                   <Select
                     value={draftForm.status}
                     onChange={(event) => setDraftForm((current) => ({ ...current, status: event.target.value as DraftStatus }))}
                   >
-                    {draftStatuses.map((status) => (
-                      <option key={status} value={status}>
-                        {formatStatusLabel(status)}
+                    {draftCreateStages.map((stage) => (
+                      <option key={stage.key} value={stage.key}>
+                        {stage.label}
                       </option>
                     ))}
                   </Select>
@@ -592,6 +712,291 @@ export function CampaignOverviewPage() {
             </form>
           </Card>
         </div>
+      </div>
+
+      <div className="mt-8 grid gap-6 xl:grid-cols-[1.02fr_0.98fr]">
+        <Card className="scroll-mt-24 border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5" id="campaign-milestones">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Milestone tracker</p>
+              <h2 className="mt-2 text-2xl font-semibold tracking-tight">Campaign milestones</h2>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge tone="muted">
+                {overview.milestones.filter((milestone) => milestone.is_complete).length}/{overview.milestones.length} complete
+              </Badge>
+              {blockedMilestoneCount(blockedMilestoneReasons) ? (
+                <Badge tone="warning">{blockedMilestoneCount(blockedMilestoneReasons)} blocked</Badge>
+              ) : null}
+            </div>
+          </div>
+
+          <p className="mt-4 text-sm leading-6 text-muted-foreground">
+            Default campaign checkpoints stay visible here even as each brand uses its own draft workflow. Dependencies can block milestone completion until prerequisite work is done.
+          </p>
+
+          {!canManageWorkflow ? (
+            <div className="mt-4 rounded-[1.25rem] border border-border bg-white/80 px-4 py-4 text-sm text-muted-foreground">
+              Reviewers and viewers can track milestone progress here, but only workspace managers can edit target dates, notes, and completion.
+            </div>
+          ) : null}
+
+          <MutationFeedback error={updateMilestoneMutation.error} />
+
+          <div className="mt-5 space-y-4">
+            {overview.milestones.map((milestone) => {
+              const form = milestoneForms[milestone.id] ?? {
+                target_date: milestone.target_date ?? "",
+                notes: milestone.notes ?? "",
+              };
+              const blockers = blockedMilestoneReasons[milestone.id] ?? [];
+              const isSaving = updateMilestoneMutation.isPending && updateMilestoneMutation.variables?.milestoneId === milestone.id;
+
+              return (
+                <form
+                  key={milestone.id}
+                  className="rounded-[1.25rem] border border-border bg-white/80 px-4 py-4"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    updateMilestoneMutation.mutate({
+                      milestoneId: milestone.id,
+                      payload: buildMilestonePayload(form),
+                    });
+                  }}
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-base font-semibold text-foreground">{milestone.label}</h3>
+                    <Badge tone={milestone.is_complete ? "success" : blockers.length ? "warning" : "muted"}>
+                      {milestone.is_complete ? "Complete" : blockers.length ? "Blocked" : "Open"}
+                    </Badge>
+                    {milestone.target_date ? <Badge tone="muted">Target {formatDate(milestone.target_date)}</Badge> : null}
+                  </div>
+
+                  <p className="mt-3 text-sm text-muted-foreground">
+                    {milestone.completed_at
+                      ? `${milestone.completed_by_name ?? "Unknown user"} completed this on ${formatDateTime(milestone.completed_at)}.`
+                      : "Set the target date, capture launch notes, and mark the milestone complete when the checkpoint is done."}
+                  </p>
+
+                  {blockers.length ? (
+                    <div className="mt-3 rounded-[1rem] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                      Blocked by: {blockers.join(", ")}
+                    </div>
+                  ) : null}
+
+                  <div className="mt-4 grid gap-4 md:grid-cols-[220px_1fr]">
+                    <Field label="Target date">
+                      <Input
+                        disabled={!canManageWorkflow}
+                        type="date"
+                        value={form.target_date}
+                        onChange={(event) =>
+                          setMilestoneForms((current) => ({
+                            ...current,
+                            [milestone.id]: {
+                              ...(current[milestone.id] ?? { target_date: milestone.target_date ?? "", notes: milestone.notes ?? "" }),
+                              target_date: event.target.value,
+                            },
+                          }))
+                        }
+                      />
+                    </Field>
+                    <Field label="Notes">
+                      <Textarea
+                        disabled={!canManageWorkflow}
+                        value={form.notes}
+                        onChange={(event) =>
+                          setMilestoneForms((current) => ({
+                            ...current,
+                            [milestone.id]: {
+                              ...(current[milestone.id] ?? { target_date: milestone.target_date ?? "", notes: milestone.notes ?? "" }),
+                              notes: event.target.value,
+                            },
+                          }))
+                        }
+                      />
+                    </Field>
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap gap-3">
+                    <Button disabled={!canManageWorkflow || isSaving} type="submit">
+                      {isSaving ? "Saving..." : "Save milestone"}
+                    </Button>
+                    <Button
+                      disabled={!canManageWorkflow || isSaving}
+                      onClick={() =>
+                        updateMilestoneMutation.mutate({
+                          milestoneId: milestone.id,
+                          payload: buildMilestonePayload(form, { is_complete: !milestone.is_complete }),
+                        })
+                      }
+                      type="button"
+                      variant={milestone.is_complete ? "ghost" : "secondary"}
+                    >
+                      {milestone.is_complete ? "Mark incomplete" : "Mark complete"}
+                    </Button>
+                  </div>
+                </form>
+              );
+            })}
+          </div>
+        </Card>
+
+        <Card className="scroll-mt-24 border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5" id="campaign-dependencies">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Dependency map</p>
+              <h2 className="mt-2 text-2xl font-semibold tracking-tight">Blocked states and prerequisites</h2>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge tone="muted">{overview.dependencies.length} total</Badge>
+              {unresolvedDependencies.length ? <Badge tone="warning">{unresolvedDependencies.length} unresolved</Badge> : null}
+              {blockedDraftCount(blockedDraftReasons) ? (
+                <Badge tone="warning">{blockedDraftCount(blockedDraftReasons)} draft blockers</Badge>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="mt-4 rounded-[1.25rem] border border-border bg-white/80 px-4 py-4">
+            <p className="text-sm leading-6 text-muted-foreground">
+              Link milestone checkpoints or specific draft stages together so the workspace can show when work is blocked. Draft cards already surface these blockers inside the planner board and list views.
+            </p>
+          </div>
+
+          <form
+            className="mt-5 space-y-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              const dependentNode = parseDependencyNode(dependencyForm.dependent_node);
+              const blockerNode = parseDependencyNode(dependencyForm.blocker_node);
+
+              if (!dependentNode || !blockerNode) {
+                return;
+              }
+
+              createDependencyMutation.mutate({
+                dependent_type: dependentNode.type,
+                dependent_milestone_id: dependentNode.type === "campaign_milestone" ? dependentNode.milestoneId : null,
+                dependent_draft_id: dependentNode.type === "draft_stage" ? dependentNode.draftId : null,
+                dependent_stage_key: dependentNode.type === "draft_stage" ? dependentNode.stageKey : null,
+                blocker_type: blockerNode.type,
+                blocker_milestone_id: blockerNode.type === "campaign_milestone" ? blockerNode.milestoneId : null,
+                blocker_draft_id: blockerNode.type === "draft_stage" ? blockerNode.draftId : null,
+                blocker_stage_key: blockerNode.type === "draft_stage" ? blockerNode.stageKey : null,
+                note: dependencyForm.note.trim() || null,
+              });
+            }}
+          >
+            <div className="grid gap-4 md:grid-cols-2">
+              <Field label="Blocked step">
+                <Select
+                  disabled={!canManageWorkflow}
+                  value={dependencyForm.dependent_node}
+                  onChange={(event) =>
+                    setDependencyForm((current) => ({
+                      ...current,
+                      dependent_node: event.target.value,
+                    }))
+                  }
+                >
+                  <option value="">Select a milestone or draft stage</option>
+                  {dependencyNodeOptions.map((option) => (
+                    <option key={`dependent-${option.value}`} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="Depends on">
+                <Select
+                  disabled={!canManageWorkflow}
+                  value={dependencyForm.blocker_node}
+                  onChange={(event) =>
+                    setDependencyForm((current) => ({
+                      ...current,
+                      blocker_node: event.target.value,
+                    }))
+                  }
+                >
+                  <option value="">Select a prerequisite step</option>
+                  {dependencyNodeOptions.map((option) => (
+                    <option key={`blocker-${option.value}`} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            </div>
+
+            <Field label="Notes">
+              <Textarea
+                disabled={!canManageWorkflow}
+                placeholder="Explain why this dependency exists or what must be finished first."
+                value={dependencyForm.note}
+                onChange={(event) =>
+                  setDependencyForm((current) => ({
+                    ...current,
+                    note: event.target.value,
+                  }))
+                }
+              />
+            </Field>
+
+            <MutationFeedback error={createDependencyMutation.error || deleteDependencyMutation.error} />
+
+            <Button
+              disabled={
+                !canManageWorkflow ||
+                createDependencyMutation.isPending ||
+                !dependencyForm.dependent_node ||
+                !dependencyForm.blocker_node
+              }
+              type="submit"
+            >
+              {createDependencyMutation.isPending ? "Saving..." : "Add dependency"}
+            </Button>
+          </form>
+
+          <div className="mt-6 space-y-3">
+            {overview.dependencies.length ? (
+              [...overview.dependencies]
+                .sort((left, right) => Number(left.is_satisfied) - Number(right.is_satisfied) || left.dependent_label.localeCompare(right.dependent_label))
+                .map((dependency) => (
+                  <div key={dependency.id} className="rounded-[1.25rem] border border-border bg-white/80 px-4 py-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="text-base font-semibold text-foreground">{dependency.dependent_label}</h3>
+                          <Badge tone={dependency.is_satisfied ? "success" : "warning"}>
+                            {dependency.is_satisfied ? "Satisfied" : "Blocking"}
+                          </Badge>
+                        </div>
+                        <p className="mt-2 text-sm text-muted-foreground">Depends on {dependency.blocker_label}</p>
+                        {dependency.note ? <p className="mt-3 text-sm leading-6 text-foreground">{dependency.note}</p> : null}
+                        <p className="mt-3 text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                          {dependency.creator_name ?? "Unknown user"} · Added {formatDateTime(dependency.created_at)}
+                        </p>
+                      </div>
+                      {canManageWorkflow ? (
+                        <Button
+                          disabled={deleteDependencyMutation.isPending}
+                          onClick={() => deleteDependencyMutation.mutate(dependency.id)}
+                          type="button"
+                          variant="danger"
+                        >
+                          Delete
+                        </Button>
+                      ) : null}
+                    </div>
+                  </div>
+                ))
+            ) : (
+              <p className="rounded-[1.25rem] border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
+                No dependencies yet. Add one when milestone or draft-stage work should wait on another campaign step.
+              </p>
+            )}
+          </div>
+        </Card>
       </div>
 
       <div className="mt-8 grid gap-6 xl:grid-cols-[1.02fr_0.98fr]">
@@ -766,8 +1171,8 @@ export function CampaignOverviewPage() {
                     <h3 className="text-base font-semibold">{version.draft_title}</h3>
                     <Badge tone="muted">v{version.version_number}</Badge>
                     <Badge>{version.platform}</Badge>
-                    <Badge tone={version.status === "approved" || version.status === "published" ? "success" : version.status === "rejected" || version.status === "in_review" ? "warning" : "muted"}>
-                      {formatStatusLabel(version.status)}
+                    <Badge tone={statusTone(version.status_type)}>
+                      {formatStatusLabel(version.status, version.status_label)}
                     </Badge>
                   </div>
                   <p className="mt-2 text-sm text-muted-foreground">{version.change_summary ?? version.content_type}</p>
@@ -822,11 +1227,13 @@ export function CampaignOverviewPage() {
       <div className="mt-8 scroll-mt-24" id="campaign-planner">
         <CampaignPlanner
           currentUserRole={currentMembership?.role}
+          dependencies={overview.dependencies}
           drafts={overview.drafts}
           isMovingDraftId={moveDraftStageMutation.variables?.draft.id ?? null}
           onMoveDraft={(draft, targetStatus) => moveDraftStageMutation.mutate({ draft, targetStatus })}
           planningSummary={overview.planning_summary}
           schedule={overview.schedule}
+          workflow={overview.draft_workflow}
         />
         {moveDraftStageMutation.error ? (
           <div className="mt-4">
@@ -1059,4 +1466,122 @@ function metadataNumber(metadata: Record<string, unknown>, key: string) {
     return Number(value);
   }
   return null;
+}
+
+function buildEmptyDraftForm(initialStatus: DraftStatus): DraftFormState {
+  return {
+    title: "",
+    platform: "",
+    content_type: "",
+    content_body: "",
+    status: initialStatus,
+    planned_publish_at: "",
+  };
+}
+
+function buildMilestonePayload(form: MilestoneFormState | undefined, overrides: Partial<{ is_complete: boolean }> = {}) {
+  return {
+    target_date: form?.target_date || null,
+    notes: form?.notes.trim() || null,
+    ...overrides,
+  };
+}
+
+function buildDraftBlockerMap(dependencies: CampaignDependency[]) {
+  return dependencies.reduce<Record<number, string[]>>((accumulator, dependency) => {
+    if (dependency.dependent_type !== "draft_stage" || !dependency.dependent_draft_id) {
+      return accumulator;
+    }
+
+    accumulator[dependency.dependent_draft_id] = [
+      ...(accumulator[dependency.dependent_draft_id] ?? []),
+      dependency.blocker_label,
+    ];
+    return accumulator;
+  }, {});
+}
+
+function buildMilestoneBlockerMap(dependencies: CampaignDependency[]) {
+  return dependencies.reduce<Record<number, string[]>>((accumulator, dependency) => {
+    if (dependency.dependent_type !== "campaign_milestone" || !dependency.dependent_milestone_id) {
+      return accumulator;
+    }
+
+    accumulator[dependency.dependent_milestone_id] = [
+      ...(accumulator[dependency.dependent_milestone_id] ?? []),
+      dependency.blocker_label,
+    ];
+    return accumulator;
+  }, {});
+}
+
+function blockedMilestoneCount(blockedMilestoneReasons: Record<number, string[]>) {
+  return Object.keys(blockedMilestoneReasons).length;
+}
+
+function blockedDraftCount(blockedDraftReasons: Record<number, string[]>) {
+  return Object.keys(blockedDraftReasons).length;
+}
+
+function buildDependencyNodeOptions({
+  drafts,
+  milestones,
+  workflow,
+}: {
+  drafts: ContentDraft[];
+  milestones: CampaignMilestone[];
+  workflow: CampaignOverview["draft_workflow"];
+}): DependencyNodeOption[] {
+  return [
+    ...milestones.map((milestone) => ({
+      value: `campaign_milestone:${milestone.id}`,
+      label: `Milestone · ${milestone.label}`,
+    })),
+    ...drafts.flatMap((draft) =>
+      workflow.stages.map((stage) => ({
+        value: `draft_stage:${draft.id}:${stage.key}`,
+        label: `Draft · ${draft.title} -> ${stage.label}`,
+      })),
+    ),
+  ];
+}
+
+function parseDependencyNode(value: string) {
+  const [type, entityId, stageKey] = value.split(":");
+  const parsedId = Number(entityId);
+
+  if (!type || !Number.isFinite(parsedId)) {
+    return null;
+  }
+
+  if (type === "campaign_milestone") {
+    return {
+      type,
+      milestoneId: parsedId,
+    } as const;
+  }
+
+  if (type === "draft_stage" && stageKey) {
+    return {
+      type,
+      draftId: parsedId,
+      stageKey,
+    } as const;
+  }
+
+  return null;
+}
+
+function statusTone(statusType: ContentDraft["status_type"]) {
+  switch (statusType) {
+    case "review":
+    case "changes_requested":
+      return "warning";
+    case "approved":
+    case "scheduled":
+    case "published":
+      return "success";
+    default:
+      return "muted";
+  }
 }

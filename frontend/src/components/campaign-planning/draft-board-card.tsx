@@ -6,6 +6,7 @@ import type { ContentDraft } from "../../lib/types";
 import { Badge } from "../ui/badge";
 
 type DraftBoardCardProps = {
+  blockedLabels?: string[];
   className?: string;
   draft: ContentDraft;
   draggable?: boolean;
@@ -15,6 +16,7 @@ type DraftBoardCardProps = {
 };
 
 export function DraftBoardCard({
+  blockedLabels = [],
   className,
   draft,
   draggable = false,
@@ -40,9 +42,10 @@ export function DraftBoardCard({
       <div className="flex flex-wrap items-center gap-2">
         <h3 className="text-sm font-semibold text-foreground">{draft.title}</h3>
         <Badge>{draft.platform}</Badge>
-        <Badge tone={draft.status === "approved" || draft.status === "published" ? "success" : draft.status === "in_review" || draft.status === "rejected" ? "warning" : "muted"}>
-          {formatStatusLabel(draft.status)}
+        <Badge tone={draft.status_type === "approved" || draft.status_type === "published" ? "success" : draft.status_type === "review" || draft.status_type === "changes_requested" ? "warning" : "muted"}>
+          {formatStatusLabel(draft.status, draft.status_label)}
         </Badge>
+        {blockedLabels.length ? <Badge tone="warning">Blocked</Badge> : null}
       </div>
 
       <p className="mt-2 text-xs uppercase tracking-[0.18em] text-muted-foreground">{draft.content_type}</p>
@@ -61,6 +64,12 @@ export function DraftBoardCard({
         <Badge tone="muted">{draft.review_count} reviews</Badge>
         {draft.planned_publish_at ? <Badge tone="muted">Publishes {formatDateTime(draft.planned_publish_at)}</Badge> : null}
       </div>
+
+      {blockedLabels.length ? (
+        <p className="mt-3 text-sm leading-6 text-rose-700">
+          Waiting on {blockedLabels.join(" · ")}
+        </p>
+      ) : null}
 
       {draft.latest_review_action ? (
         <p className="mt-3 text-xs uppercase tracking-[0.16em] text-muted-foreground">

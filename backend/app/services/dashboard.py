@@ -1,10 +1,10 @@
 from collections import Counter
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import case, func, or_, select
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import case, func, select
+from sqlalchemy.orm import Session, joinedload, selectinload
 
-from app.core.enums import AssignmentEntityType, AssignmentStatus, CampaignStatus, DraftReviewAction, DraftStatus, MembershipStatus
+from app.core.enums import AssignmentEntityType, AssignmentStatus, CampaignStatus, DraftReviewAction, DraftStageType, MembershipStatus
 from app.models.audit_log import AuditLog
 from app.models.assignment import Assignment
 from app.models.brand_membership import BrandMembership
@@ -37,6 +37,7 @@ from app.schemas.dashboard import (
     DashboardWorkloadAnalytics,
     DashboardHealthFactor,
 )
+from app.services.draft_workflows import get_brand_draft_workflow, get_workflow_stage_or_raise
 
 HEALTH_MAX_SCORE = 100
 HEALTH_LABELS = (
@@ -81,7 +82,6 @@ def _bucket_counts(items: Counter | dict, *, labels: dict[str, str], ordered_key
 
 def _empty_dashboard_analytics(*, interval: str) -> DashboardAnalytics:
     campaign_labels = {status.value: status.value.replace("_", " ").title() for status in CampaignStatus}
-    draft_labels = {status.value: status.value.replace("_", " ").title() for status in DraftStatus}
     review_labels = {action: action.replace("_", " ").title() for action in ["commented", "submitted", "approved", "rejected", "resubmitted"]}
 
     return DashboardAnalytics(
@@ -94,7 +94,7 @@ def _empty_dashboard_analytics(*, interval: str) -> DashboardAnalytics:
             total=0,
             pending_review_count=0,
             approved_count=0,
-            by_status=_bucket_counts({}, labels=draft_labels, ordered_keys=[status.value for status in DraftStatus]),
+            by_status=[],
         ),
         reviews=DashboardReviewAnalytics(
             pending_count=0,
@@ -131,6 +131,24 @@ def _empty_dashboard_analytics(*, interval: str) -> DashboardAnalytics:
 
 def _round_metric(value: float) -> float:
     return round(value, 2)
+
+
+def _draft_stage(draft: ContentDraft):
+    workflow = get_brand_draft_workflow(draft.campaign.project.brand)
+    return get_workflow_stage_or_raise(workflow, draft.status)
+
+
+def _calendar_item_complete(item: CalendarItem) -> bool:
+    if item.draft is None:
+        return item.status == "published"
+    return _draft_stage(item.draft).stage_type == DraftStageType.PUBLISHED
+
+
+def _bucket_key_label(draft: ContentDraft, *, single_brand_scope: bool) -> tuple[str, str]:
+    stage = _draft_stage(draft)
+    if single_brand_scope:
+        return stage.key, stage.label
+    return f"{draft.campaign.project.brand_id}:{stage.key}", f"{draft.campaign.project.brand.name} · {stage.label}"
 
 
 def _campaign_health_label(score: int) -> str:
@@ -173,21 +191,25 @@ def _build_campaign_health(campaign: Campaign, *, now: datetime) -> DashboardCam
         for draft in drafts
         if draft.planned_publish_at is not None
         and draft.planned_publish_at < now
-        and draft.status != DraftStatus.PUBLISHED
+        and _draft_stage(draft).stage_type != DraftStageType.PUBLISHED
     )
-    pending_approval_count = sum(1 for draft in drafts if draft.status == DraftStatus.IN_REVIEW)
+    pending_approval_count = sum(1 for draft in drafts if _draft_stage(draft).stage_type == DraftStageType.REVIEW)
     missing_assets_count = 1 if drafts and asset_count == 0 else 0
     unassigned_work_count = sum(
         1
         for draft in drafts
-        if draft.status != DraftStatus.PUBLISHED and not open_assignments_by_draft_id.get(draft.id, False)
+        if _draft_stage(draft).stage_type != DraftStageType.PUBLISHED and not open_assignments_by_draft_id.get(draft.id, False)
     )
     upcoming_deadline_count = sum(
         1
         for draft in drafts
         if draft.planned_publish_at is not None
         and now <= draft.planned_publish_at <= upcoming_deadline_cutoff
-        and draft.status not in {DraftStatus.APPROVED, DraftStatus.SCHEDULED, DraftStatus.PUBLISHED}
+        and _draft_stage(draft).stage_type not in {
+            DraftStageType.APPROVED,
+            DraftStageType.SCHEDULED,
+            DraftStageType.PUBLISHED,
+        }
     )
 
     factors = [
@@ -271,30 +293,16 @@ def get_dashboard_summary(db: Session, *, user: User, brand_id: int | None = Non
             Campaign.status == CampaignStatus.ACTIVE,
         )
     ) or 0
-    draft_count = db.scalar(
-        select(func.count(ContentDraft.id))
+    drafts = db.scalars(
+        select(ContentDraft)
         .join(Campaign, Campaign.id == ContentDraft.campaign_id)
         .join(Project, Project.id == Campaign.project_id)
+        .options(joinedload(ContentDraft.campaign).joinedload(Campaign.project).joinedload(Project.brand))
         .where(Project.brand_id.in_(brand_ids))
-    ) or 0
-    pending_review_count = db.scalar(
-        select(func.count(ContentDraft.id))
-        .join(Campaign, Campaign.id == ContentDraft.campaign_id)
-        .join(Project, Project.id == Campaign.project_id)
-        .where(
-            Project.brand_id.in_(brand_ids),
-            ContentDraft.status == DraftStatus.IN_REVIEW,
-        )
-    ) or 0
-    approved_draft_count = db.scalar(
-        select(func.count(ContentDraft.id))
-        .join(Campaign, Campaign.id == ContentDraft.campaign_id)
-        .join(Project, Project.id == Campaign.project_id)
-        .where(
-            Project.brand_id.in_(brand_ids),
-            ContentDraft.status == DraftStatus.APPROVED,
-        )
-    ) or 0
+    ).unique().all()
+    draft_count = len(drafts)
+    pending_review_count = sum(1 for draft in drafts if _draft_stage(draft).stage_type == DraftStageType.REVIEW)
+    approved_draft_count = sum(1 for draft in drafts if _draft_stage(draft).stage_type == DraftStageType.APPROVED)
     scheduled_item_count = db.scalar(
         select(func.count(CalendarItem.id)).where(
             CalendarItem.brand_id.in_(brand_ids),
@@ -362,14 +370,16 @@ def get_dashboard_analytics(
     ).all()
     campaign_counts = Counter({status.value if isinstance(status, CampaignStatus) else str(status): count for status, count in campaign_rows})
 
-    draft_rows = db.execute(
-        select(ContentDraft.status, func.count(ContentDraft.id))
+    single_brand_scope = len(brand_ids) == 1
+    drafts = db.scalars(
+        select(ContentDraft)
         .join(Campaign, Campaign.id == ContentDraft.campaign_id)
         .join(Project, Project.id == Campaign.project_id)
+        .options(joinedload(ContentDraft.campaign).joinedload(Campaign.project).joinedload(Project.brand))
         .where(Project.brand_id.in_(brand_ids))
-        .group_by(ContentDraft.status)
-    ).all()
-    draft_counts = Counter({status.value if isinstance(status, DraftStatus) else str(status): count for status, count in draft_rows})
+        .order_by(ContentDraft.created_at.desc())
+    ).unique().all()
+    draft_lookup = {draft.id: draft for draft in drafts}
 
     review_window_days = 14
     review_window_start = datetime.now(UTC) - timedelta(days=review_window_days)
@@ -388,27 +398,28 @@ def get_dashboard_analytics(
 
     now = datetime.now(UTC)
     upcoming_window_end = now + timedelta(days=14)
-    upcoming_schedule_rows = db.scalars(
-        select(CalendarItem.scheduled_for).where(
-            CalendarItem.brand_id.in_(brand_ids),
-            CalendarItem.scheduled_for >= now,
-            CalendarItem.scheduled_for < upcoming_window_end,
+    calendar_items = db.scalars(
+        select(CalendarItem)
+        .join(Campaign, Campaign.id == CalendarItem.campaign_id)
+        .join(Project, Project.id == Campaign.project_id)
+        .options(
+            joinedload(CalendarItem.draft).joinedload(ContentDraft.campaign).joinedload(Campaign.project).joinedload(Project.brand)
         )
-    ).all()
+        .where(Project.brand_id.in_(brand_ids))
+    ).unique().all()
+    upcoming_schedule_rows = [
+        item.scheduled_for
+        for item in calendar_items
+        if item.scheduled_for >= now and item.scheduled_for < upcoming_window_end
+    ]
     upcoming_by_day = Counter(item.date() for item in upcoming_schedule_rows)
-    overdue_count = db.scalar(
-        select(func.count(CalendarItem.id)).where(
-            CalendarItem.brand_id.in_(brand_ids),
-            CalendarItem.scheduled_for < now,
-            or_(
-                CalendarItem.status.is_(None),
-                CalendarItem.status != DraftStatus.PUBLISHED.value,
-            ),
-        )
-    ) or 0
+    overdue_count = sum(
+        1
+        for item in calendar_items
+        if item.scheduled_for < now and not _calendar_item_complete(item)
+    )
 
     campaign_labels = {status.value: status.value.replace("_", " ").title() for status in CampaignStatus}
-    draft_labels = {status.value: status.value.replace("_", " ").title() for status in DraftStatus}
     review_keys = ["commented", "submitted", "approved", "rejected", "resubmitted"]
     review_labels = {key: key.replace("_", " ").title() for key in review_keys}
 
@@ -470,17 +481,28 @@ def get_dashboard_analytics(
     ).all()
 
     stale_cutoff = now - timedelta(days=3)
-    bottleneck_rows = db.execute(
-        select(
-            ContentDraft.status,
-            func.count(ContentDraft.id),
-            func.sum(case((ContentDraft.updated_at < stale_cutoff, 1), else_=0)),
-        )
-        .join(Campaign, Campaign.id == ContentDraft.campaign_id)
-        .join(Project, Project.id == Campaign.project_id)
-        .where(Project.brand_id.in_(brand_ids))
-        .group_by(ContentDraft.status)
-    ).all()
+    draft_counts: Counter[str] = Counter()
+    draft_labels: dict[str, str] = {}
+    draft_bucket_order: list[str] = []
+    pending_review_count = 0
+    approved_count = 0
+    bottleneck_meta: dict[str, dict[str, int | str]] = {}
+
+    for draft in drafts:
+        bucket_key, bucket_label = _bucket_key_label(draft, single_brand_scope=single_brand_scope)
+        stage = _draft_stage(draft)
+        draft_counts[bucket_key] += 1
+        if bucket_key not in draft_labels:
+            draft_labels[bucket_key] = bucket_label
+            draft_bucket_order.append(bucket_key)
+            bottleneck_meta[bucket_key] = {"count": 0, "stale_count": 0, "label": bucket_label}
+        bottleneck_meta[bucket_key]["count"] = int(bottleneck_meta[bucket_key]["count"]) + 1
+        if draft.updated_at < stale_cutoff:
+            bottleneck_meta[bucket_key]["stale_count"] = int(bottleneck_meta[bucket_key]["stale_count"]) + 1
+        if stage.stage_type == DraftStageType.REVIEW:
+            pending_review_count += 1
+        if stage.stage_type == DraftStageType.APPROVED:
+            approved_count += 1
 
     review_cycle_rows = db.execute(
         select(
@@ -508,7 +530,9 @@ def get_dashboard_analytics(
 
     for draft_id, action, created_at, draft_title, draft_status, campaign_id, campaign_name in review_cycle_rows:
         action_value = action.value if isinstance(action, DraftReviewAction) else str(action)
-        status_value = draft_status if isinstance(draft_status, DraftStatus) else DraftStatus(str(draft_status))
+        current_draft = draft_lookup.get(draft_id)
+        status_value = current_draft.status if current_draft is not None else str(draft_status)
+        status_label = _draft_stage(current_draft).label if current_draft is not None else str(draft_status).replace("_", " ").title()
         draft_meta = draft_revision_cycle_meta.setdefault(
             draft_id,
             {
@@ -519,6 +543,7 @@ def get_dashboard_analytics(
                 "revision_cycle_count": 0,
                 "rejection_count": 0,
                 "status": status_value,
+                "status_label": status_label,
             },
         )
 
@@ -594,16 +619,15 @@ def get_dashboard_analytics(
         ),
         drafts=DashboardDraftAnalytics(
             total=sum(draft_counts.values()),
-            pending_review_count=draft_counts.get(DraftStatus.IN_REVIEW.value, 0),
-            approved_count=draft_counts.get(DraftStatus.APPROVED.value, 0),
-            by_status=_bucket_counts(
-                draft_counts,
-                labels=draft_labels,
-                ordered_keys=[status.value for status in DraftStatus],
-            ),
+            pending_review_count=pending_review_count,
+            approved_count=approved_count,
+            by_status=[
+                DashboardCountBucket(key=key, label=draft_labels[key], count=int(draft_counts[key]))
+                for key in draft_bucket_order
+            ],
         ),
         reviews=DashboardReviewAnalytics(
-            pending_count=draft_counts.get(DraftStatus.IN_REVIEW.value, 0),
+            pending_count=pending_review_count,
             recent_window_days=review_window_days,
             recent_actions=_bucket_counts(review_counts, labels=review_labels, ordered_keys=review_keys),
         ),
@@ -640,14 +664,14 @@ def get_dashboard_analytics(
             ],
             bottlenecks_by_status=[
                 DashboardStatusBottleneck(
-                    status=status if isinstance(status, DraftStatus) else DraftStatus(str(status)),
-                    label=(status.value if isinstance(status, DraftStatus) else str(status)).replace("_", " ").title(),
-                    count=int(count or 0),
-                    stale_count=int(stale_count or 0),
+                    status=key,
+                    label=str(values["label"]),
+                    count=int(values["count"]),
+                    stale_count=int(values["stale_count"]),
                 )
-                for status, count, stale_count in sorted(
-                    bottleneck_rows,
-                    key=lambda row: (-(row[1] or 0), str(row[0])),
+                for key, values in sorted(
+                    bottleneck_meta.items(),
+                    key=lambda item: (-int(item[1]["count"]), str(item[1]["label"])),
                 )
             ],
         ),
@@ -664,7 +688,8 @@ def get_dashboard_analytics(
                     campaign_name=str(item["campaign_name"]),
                     revision_cycle_count=int(item["revision_cycle_count"]),
                     rejection_count=int(item["rejection_count"]),
-                    status=item["status"] if isinstance(item["status"], DraftStatus) else DraftStatus(str(item["status"])),
+                    status=str(item["status"]),
+                    status_label=str(item["status_label"]),
                 )
                 for item in sorted(
                     (item for item in draft_revision_cycle_meta.values() if int(item["revision_cycle_count"]) > 1),

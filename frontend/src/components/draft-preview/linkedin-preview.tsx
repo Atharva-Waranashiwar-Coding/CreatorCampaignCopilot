@@ -1,7 +1,7 @@
-import { formatDateTime } from "../../lib/format";
+import { formatDateTime, formatStatusLabel } from "../../lib/format";
 import { Badge } from "../ui/badge";
 import type { DraftPreviewInput } from "./preview-utils";
-import { bodyParagraphs, firstSentence, handleFromName, initials, previewTitle } from "./preview-utils";
+import { bodyParagraphs, firstSentence, handleFromName, initials, previewStatusTone, previewTitle } from "./preview-utils";
 
 type LinkedInPreviewProps = {
   input: DraftPreviewInput;
@@ -36,8 +36,8 @@ export function LinkedInPreview({ input }: LinkedInPreviewProps) {
 
         <div className="mt-5 flex flex-wrap gap-2">
           <Badge tone="muted">{input.campaignName}</Badge>
-          <Badge tone={input.status === "approved" || input.status === "published" ? "success" : "warning"}>
-            {input.status.replace(/_/g, " ")}
+          <Badge tone={previewStatusTone(input.statusType)}>
+            {formatStatusLabel(input.status, input.statusLabel)}
           </Badge>
         </div>
       </div>

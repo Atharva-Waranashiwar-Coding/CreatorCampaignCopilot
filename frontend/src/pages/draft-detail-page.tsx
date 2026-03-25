@@ -23,6 +23,7 @@ import type {
   AssignmentEntityType,
   CollaborationComment,
   ContentDraft,
+  DraftStageType,
   DraftReviewAction,
   DraftReviewThread,
   DraftVersion,
@@ -277,7 +278,7 @@ export function DraftDetailPage() {
         description={`${draft.brand_name} · ${draft.project_name} · ${draft.campaign_name}`}
         actions={
           <div className="flex flex-wrap gap-3">
-            <Badge tone={statusTone(draft.status)}>{formatStatusLabel(draft.status)}</Badge>
+            <Badge tone={statusTone(draft.status_type)}>{formatStatusLabel(draft.status, draft.status_label)}</Badge>
             <Badge tone="muted">v{draft.current_version_number}</Badge>
             <Link
               className="inline-flex items-center rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
@@ -385,6 +386,8 @@ export function DraftDetailPage() {
               plannedPublishAt: form.planned_publish_at,
               platform: form.platform,
               status: draft.status,
+              statusLabel: draft.status_label,
+              statusType: draft.status_type,
               title: form.title,
             }}
           />
@@ -526,7 +529,9 @@ export function DraftDetailPage() {
                     <div className="flex flex-wrap items-center gap-3">
                       <Badge tone="muted">v{version.version_number}</Badge>
                       <Badge>{version.platform}</Badge>
-                      <Badge tone={statusTone(version.status)}>{formatStatusLabel(version.status)}</Badge>
+                      <Badge tone={statusTone(version.status_type)}>
+                        {formatStatusLabel(version.status, version.status_label)}
+                      </Badge>
                     </div>
                     <p className="mt-3 text-sm font-medium text-foreground">
                       {version.change_summary ?? version.title}
@@ -580,7 +585,8 @@ export function DraftDetailPage() {
                     ) : null}
                     {review.from_status || review.to_status ? (
                       <p className="mt-3 text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                        {formatStatusLabel(review.from_status ?? "unknown")} to {formatStatusLabel(review.to_status ?? "unknown")}
+                        {formatStatusLabel(review.from_status ?? "unknown", review.from_status_label)} to{" "}
+                        {formatStatusLabel(review.to_status ?? "unknown", review.to_status_label)}
                       </p>
                     ) : null}
                   </div>
@@ -663,11 +669,11 @@ function reviewTone(action: DraftReviewAction) {
   return "muted";
 }
 
-function statusTone(status: ContentDraft["status"]) {
-  if (status === "approved" || status === "published") {
+function statusTone(statusType: DraftStageType) {
+  if (statusType === "approved" || statusType === "published") {
     return "success";
   }
-  if (status === "in_review" || status === "rejected") {
+  if (statusType === "review" || statusType === "changes_requested") {
     return "warning";
   }
   return "muted";

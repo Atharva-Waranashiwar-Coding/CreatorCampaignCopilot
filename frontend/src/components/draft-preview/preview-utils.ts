@@ -1,4 +1,4 @@
-import type { DraftStatus } from "../../lib/types";
+import type { DraftStageType, DraftStatus } from "../../lib/types";
 
 export type PreviewMode = "auto" | "linkedin" | "instagram" | "email" | "article";
 export type ResolvedPreviewKind = Exclude<PreviewMode, "auto"> | "generic";
@@ -11,8 +11,24 @@ export type DraftPreviewInput = {
   plannedPublishAt: string;
   platform: string;
   status: DraftStatus;
+  statusLabel?: string;
+  statusType?: DraftStageType;
   title: string;
 };
+
+export function previewStatusTone(statusType?: DraftStageType) {
+  switch (statusType) {
+    case "review":
+    case "changes_requested":
+      return "warning";
+    case "approved":
+    case "scheduled":
+    case "published":
+      return "success";
+    default:
+      return "muted";
+  }
+}
 
 export function resolvePreviewKind(input: DraftPreviewInput, mode: PreviewMode): ResolvedPreviewKind {
   if (mode !== "auto") {
