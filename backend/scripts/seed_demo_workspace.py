@@ -10,7 +10,7 @@ sys.path.append(str(Path(__file__).resolve().parents[1]))
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.core.enums import AssignmentEntityType, BrandRole, CampaignStatus, MembershipStatus, NotificationType, PlanInterval
+from app.core.enums import AssignmentEntityType, BrandRole, CampaignStatus, DraftStatus, MembershipStatus, NotificationType, PlanInterval
 from app.core.security import hash_password
 from app.db.session import SessionLocal
 from app.models.assignment import Assignment
@@ -21,6 +21,8 @@ from app.models.campaign import Campaign
 from app.models.content_brief import ContentBrief
 from app.models.content_draft import ContentDraft
 from app.models.content_template import ContentTemplate
+from app.models.draft_review import DraftReview
+from app.models.draft_version import DraftVersion
 from app.models.project import Project
 from app.models.user import User
 from app.schemas.assignment import AssignmentCreate
@@ -42,15 +44,42 @@ from app.services.reviews import add_review_comment, approve_draft, reject_draft
 from app.services.templates import create_template
 
 DEMO_USERS = (
-    ("maya.chen.demo@creatorcopilot.local", "Maya Chen"),
-    ("jordan.patel.demo@creatorcopilot.local", "Jordan Patel"),
-    ("leo.morgan.demo@creatorcopilot.local", "Leo Morgan"),
+    {
+        "email": "maya.chen.demo@example.com",
+        "legacy_emails": ("maya.chen.demo@creatorcopilot.local",),
+        "full_name": "Maya Chen",
+    },
+    {
+        "email": "jordan.patel.demo@example.com",
+        "legacy_emails": ("jordan.patel.demo@creatorcopilot.local",),
+        "full_name": "Jordan Patel",
+    },
+    {
+        "email": "leo.morgan.demo@example.com",
+        "legacy_emails": ("leo.morgan.demo@creatorcopilot.local",),
+        "full_name": "Leo Morgan",
+    },
 )
 
 
-def ensure_user(db: Session, *, email: str, full_name: str) -> User:
+def ensure_user(
+    db: Session,
+    *,
+    email: str,
+    full_name: str,
+    legacy_emails: tuple[str, ...] = (),
+) -> User:
     user = db.scalar(select(User).where(User.email == email))
+    if user is None:
+        for legacy_email in legacy_emails:
+            user = db.scalar(select(User).where(User.email == legacy_email))
+            if user is not None:
+                break
     if user is not None:
+        user.email = email
+        user.full_name = full_name
+        db.commit()
+        db.refresh(user)
         return user
 
     user = User(
@@ -62,6 +91,36 @@ def ensure_user(db: Session, *, email: str, full_name: str) -> User:
     db.commit()
     db.refresh(user)
     return user
+
+
+def repair_legacy_draft_statuses(db: Session) -> None:
+    legacy_status_map = {status.name: status.value for status in DraftStatus}
+
+    drafts = db.scalars(
+        select(ContentDraft).where(ContentDraft.status.in_(legacy_status_map))
+    ).all()
+    for draft in drafts:
+        draft.status = legacy_status_map.get(draft.status, draft.status)
+
+    versions = db.scalars(
+        select(DraftVersion).where(DraftVersion.status.in_(legacy_status_map))
+    ).all()
+    for version in versions:
+        version.status = legacy_status_map.get(version.status, version.status)
+
+    reviews = db.scalars(
+        select(DraftReview).where(
+            DraftReview.from_status.in_(legacy_status_map) | DraftReview.to_status.in_(legacy_status_map)
+        )
+    ).all()
+    for review in reviews:
+        if review.from_status in legacy_status_map:
+            review.from_status = legacy_status_map[review.from_status]
+        if review.to_status in legacy_status_map:
+            review.to_status = legacy_status_map[review.to_status]
+
+    if drafts or versions or reviews:
+        db.commit()
 
 
 def ensure_membership(
@@ -80,6 +139,13 @@ def ensure_membership(
         )
     )
     if membership is None:
+        membership = db.scalar(
+            select(BrandMembership).where(
+                BrandMembership.brand_id == brand_id,
+                BrandMembership.user_id == user_id,
+            )
+        )
+    if membership is None:
         membership = BrandMembership(
             brand_id=brand_id,
             user_id=user_id,
@@ -92,6 +158,7 @@ def ensure_membership(
         db.add(membership)
     else:
         membership.user_id = user_id
+        membership.invite_email = invite_email
         membership.invited_by_id = invited_by_id
         membership.role = role
         membership.status = MembershipStatus.ACTIVE
@@ -556,9 +623,26 @@ def seed_workspace(db: Session, *, email: str) -> None:
     if owner is None:
         raise LookupError(f"User '{email}' was not found.")
 
-    maya = ensure_user(db, email=DEMO_USERS[0][0], full_name=DEMO_USERS[0][1])
-    jordan = ensure_user(db, email=DEMO_USERS[1][0], full_name=DEMO_USERS[1][1])
-    leo = ensure_user(db, email=DEMO_USERS[2][0], full_name=DEMO_USERS[2][1])
+    repair_legacy_draft_statuses(db)
+
+    maya = ensure_user(
+        db,
+        email=DEMO_USERS[0]["email"],
+        full_name=DEMO_USERS[0]["full_name"],
+        legacy_emails=DEMO_USERS[0]["legacy_emails"],
+    )
+    jordan = ensure_user(
+        db,
+        email=DEMO_USERS[1]["email"],
+        full_name=DEMO_USERS[1]["full_name"],
+        legacy_emails=DEMO_USERS[1]["legacy_emails"],
+    )
+    leo = ensure_user(
+        db,
+        email=DEMO_USERS[2]["email"],
+        full_name=DEMO_USERS[2]["full_name"],
+        legacy_emails=DEMO_USERS[2]["legacy_emails"],
+    )
 
     today = datetime.now(UTC)
     current_date = today.date()

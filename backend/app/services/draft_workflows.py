@@ -133,6 +133,25 @@ def draft_workflow_stage_map(workflow: DraftWorkflowRead) -> dict[str, DraftWork
     return {stage.key: stage for stage in workflow.stages}
 
 
+def normalize_workflow_stage_key(stage_key: str | None) -> str | None:
+    if stage_key is None:
+        return None
+
+    raw_key = str(stage_key).strip()
+    if not raw_key:
+        return raw_key
+
+    if raw_key in DraftStatus.__members__:
+        return DraftStatus[raw_key].value
+
+    lowered_key = raw_key.lower()
+    for status in DraftStatus:
+        if lowered_key == status.value:
+            return status.value
+
+    return raw_key
+
+
 def get_workflow_stage_or_raise(
     workflow: DraftWorkflowRead,
     stage_key: str,
@@ -140,6 +159,8 @@ def get_workflow_stage_or_raise(
     message_prefix: str = "Draft status",
 ) -> DraftWorkflowStageRead:
     stage = draft_workflow_stage_map(workflow).get(str(stage_key))
+    if stage is None:
+        stage = draft_workflow_stage_map(workflow).get(str(normalize_workflow_stage_key(stage_key)))
     if stage is None:
         raise ValueError(f"{message_prefix} '{stage_key}' is not part of this brand workflow.")
     return stage
@@ -160,10 +181,13 @@ def is_workflow_transition_allowed(
     current_stage_key: str,
     next_stage_key: str,
 ) -> bool:
-    if current_stage_key == next_stage_key:
+    normalized_current = normalize_workflow_stage_key(current_stage_key) or current_stage_key
+    normalized_next = normalize_workflow_stage_key(next_stage_key) or next_stage_key
+
+    if normalized_current == normalized_next:
         return True
-    stage = get_workflow_stage_or_raise(workflow, current_stage_key)
-    return next_stage_key in stage.allowed_next_stage_keys
+    stage = get_workflow_stage_or_raise(workflow, normalized_current)
+    return normalized_next in stage.allowed_next_stage_keys
 
 
 def _validate_workflow(stages: list[DraftWorkflowStageRead]) -> None:
