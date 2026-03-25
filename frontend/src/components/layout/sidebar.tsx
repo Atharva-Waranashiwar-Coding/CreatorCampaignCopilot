@@ -8,6 +8,7 @@ const navItems = [
   { label: "Projects", to: "/projects" },
   { label: "Campaigns", to: "/campaigns" },
   { label: "Drafts", to: "/drafts" },
+  { label: "Review Queue", to: "/reviews" },
 ];
 
 type SidebarProps = {
