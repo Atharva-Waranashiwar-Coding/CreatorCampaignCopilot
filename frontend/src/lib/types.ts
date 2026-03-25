@@ -325,6 +325,30 @@ export type DashboardDateBucket = {
   count: number;
 };
 
+export type DashboardHealthFactor = {
+  key: string;
+  label: string;
+  count: number;
+  penalty: number;
+  detail: string;
+};
+
+export type DashboardMemberBucket = {
+  user_id: number;
+  name: string;
+  email: string;
+  count: number;
+  overdue_count: number;
+  due_soon_count: number;
+};
+
+export type DashboardStatusBottleneck = {
+  status: DraftStatus;
+  label: string;
+  count: number;
+  stale_count: number;
+};
+
 export type DashboardSummary = {
   brand_count: number;
   project_count: number;
@@ -363,11 +387,77 @@ export type DashboardScheduleAnalytics = {
   upcoming_by_day: DashboardDateBucket[];
 };
 
+export type DashboardWorkloadAnalytics = {
+  drafts_by_member: DashboardMemberBucket[];
+  pending_reviews_by_reviewer: DashboardMemberBucket[];
+  bottlenecks_by_status: DashboardStatusBottleneck[];
+};
+
+export type DashboardRevisionCycleItem = {
+  draft_id: number;
+  draft_title: string;
+  campaign_id: number;
+  campaign_name: string;
+  revision_cycle_count: number;
+  rejection_count: number;
+  status: DraftStatus;
+};
+
+export type DashboardApprovalAnalytics = {
+  average_review_time_hours: number;
+  average_approval_time_hours: number;
+  rejection_rate: number;
+  decision_count: number;
+  drafts_with_multiple_revision_cycles: DashboardRevisionCycleItem[];
+  multi_revision_draft_count: number;
+};
+
+export type DashboardContentMixAnalytics = {
+  interval: string;
+  by_platform: DashboardCountBucket[];
+  by_content_type: DashboardCountBucket[];
+  by_campaign_status: DashboardCountBucket[];
+  by_interval: DashboardDateBucket[];
+};
+
+export type DashboardCampaignHealth = {
+  campaign_id: number;
+  campaign_name: string;
+  project_id: number;
+  project_name: string;
+  brand_id: number;
+  brand_name: string;
+  campaign_status: string;
+  score: number;
+  label: string;
+  penalty_total: number;
+  draft_count: number;
+  asset_count: number;
+  next_deadline_at: string | null;
+  factors: DashboardHealthFactor[];
+};
+
+export type DashboardCampaignHealthSummary = {
+  average_score: number;
+  healthy_count: number;
+  watch_count: number;
+  at_risk_count: number;
+  critical_count: number;
+};
+
+export type DashboardCampaignHealthReport = {
+  summary: DashboardCampaignHealthSummary;
+  campaigns: DashboardCampaignHealth[];
+};
+
 export type DashboardAnalytics = {
   campaigns: DashboardCampaignAnalytics;
   drafts: DashboardDraftAnalytics;
   reviews: DashboardReviewAnalytics;
   schedule: DashboardScheduleAnalytics;
+  workload: DashboardWorkloadAnalytics;
+  approvals: DashboardApprovalAnalytics;
+  content_mix: DashboardContentMixAnalytics;
 };
 
 export type ContentTemplate = {
