@@ -3,7 +3,7 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
-from app.core.enums import CommentEntityType
+from app.core.enums import CommentEntityType, NotificationType
 from app.core.permissions import COLLABORATION_WRITE_ROLES, require_role
 from app.models.collaboration_comment import CollaborationComment
 from app.models.mention import Mention
@@ -16,6 +16,7 @@ from app.services.collaboration import (
     get_draft_collaboration_context,
     serialize_comment_tree,
 )
+from app.services.notifications import notify_users
 
 
 def list_campaign_comments(db: Session, *, campaign_id: int, user: User) -> list[CollaborationCommentRead]:
@@ -67,7 +68,19 @@ def create_campaign_comment(
     )
     db.add(comment)
     db.flush()
-    create_comment_mentions(db, brand_id=campaign.project.brand_id, author_user_id=user.id, comment=comment)
+    mentions = create_comment_mentions(db, brand_id=campaign.project.brand_id, author_user_id=user.id, comment=comment)
+    notify_users(
+        db,
+        user_ids=[mention.mentioned_user_id for mention in mentions],
+        brand_id=campaign.project.brand_id,
+        notification_type=NotificationType.MENTION,
+        title="You were mentioned in a campaign comment",
+        body=f"{user.full_name} mentioned you in the {campaign.name} discussion.",
+        entity_type="campaign",
+        entity_id=campaign.id,
+        actor_user_id=user.id,
+        metadata={"campaign_id": campaign.id, "comment_id": comment.id},
+    )
     record_audit_log(
         db,
         brand_id=campaign.project.brand_id,
@@ -133,7 +146,19 @@ def create_draft_comment(
     )
     db.add(comment)
     db.flush()
-    create_comment_mentions(db, brand_id=draft.campaign.project.brand_id, author_user_id=user.id, comment=comment)
+    mentions = create_comment_mentions(db, brand_id=draft.campaign.project.brand_id, author_user_id=user.id, comment=comment)
+    notify_users(
+        db,
+        user_ids=[mention.mentioned_user_id for mention in mentions],
+        brand_id=draft.campaign.project.brand_id,
+        notification_type=NotificationType.MENTION,
+        title="You were mentioned in a draft comment",
+        body=f"{user.full_name} mentioned you on the draft {draft.title}.",
+        entity_type="content_draft",
+        entity_id=draft.id,
+        actor_user_id=user.id,
+        metadata={"campaign_id": draft.campaign_id, "draft_id": draft.id, "comment_id": comment.id},
+    )
     record_audit_log(
         db,
         brand_id=draft.campaign.project.brand_id,

@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.enums import AssignmentStatus, MembershipStatus, NotificationType
@@ -21,7 +21,7 @@ def _serialize_notification(notification: Notification) -> NotificationRead:
         brand_id=notification.brand_id,
         actor_user_id=notification.actor_user_id,
         actor_name=notification.actor.full_name if notification.actor else None,
-        notification_type=NotificationType(notification.notification_type),
+        notification_type=notification.notification_type,
         title=notification.title,
         body=notification.body,
         entity_type=notification.entity_type,
@@ -55,7 +55,7 @@ def create_notification(
         user_id=user_id,
         brand_id=brand_id,
         actor_user_id=actor_user_id,
-        notification_type=notification_type.value,
+        notification_type=notification_type,
         title=title.strip(),
         body=body.strip(),
         entity_type=entity_type,
@@ -66,6 +66,40 @@ def create_notification(
     db.add(notification)
     db.flush()
     return notification
+
+
+def notify_users(
+    db: Session,
+    *,
+    user_ids: list[int],
+    brand_id: int,
+    notification_type: NotificationType,
+    title: str,
+    body: str,
+    entity_type: str,
+    entity_id: int | None,
+    actor_user_id: int | None = None,
+    metadata: dict[str, Any] | None = None,
+    dedupe_prefix: str | None = None,
+) -> None:
+    seen: set[int] = set()
+    for user_id in user_ids:
+        if user_id in seen:
+            continue
+        seen.add(user_id)
+        create_notification(
+            db,
+            user_id=user_id,
+            brand_id=brand_id,
+            notification_type=notification_type,
+            title=title,
+            body=body,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            actor_user_id=actor_user_id,
+            metadata=metadata,
+            dedupe_key=f"{dedupe_prefix}:{user_id}" if dedupe_prefix else None,
+        )
 
 
 def sync_due_soon_notifications(db: Session, *, user: User, window_hours: int = 48) -> None:

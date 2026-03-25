@@ -25,3 +25,7 @@ class NotificationRead(BaseModel):
 class NotificationSummaryRead(BaseModel):
     unread_count: int
     recent_unread: list[NotificationRead]
+
+
+class NotificationMarkAllRead(BaseModel):
+    updated_count: int

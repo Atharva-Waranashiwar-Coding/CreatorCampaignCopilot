@@ -6,6 +6,7 @@ from app.core.enums import AssignmentEntityType, AssignmentStatus
 
 
 class AssignmentCreate(BaseModel):
+    assignment_type: AssignmentEntityType | None = None
     assignee_user_id: int
     note: str | None = Field(default=None, max_length=2000)
     due_at: datetime | None = None
