@@ -25,3 +25,13 @@ class CampaignStatus(StrEnum):
     ACTIVE = "active"
     COMPLETED = "completed"
     ARCHIVED = "archived"
+
+
+class DraftStatus(StrEnum):
+    IDEA = "idea"
+    DRAFT = "draft"
+    IN_REVIEW = "in_review"
+    APPROVED = "approved"
+    SCHEDULED = "scheduled"
+    PUBLISHED = "published"
+    REJECTED = "rejected"

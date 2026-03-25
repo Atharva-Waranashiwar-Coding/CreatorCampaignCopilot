@@ -8,4 +8,6 @@ class DashboardSummary(BaseModel):
     project_count: int
     campaign_count: int
     active_campaign_count: int
+    draft_count: int = 0
+    in_review_draft_count: int = 0
     recent_activity: list[AuditLogRead]

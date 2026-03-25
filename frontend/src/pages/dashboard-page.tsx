@@ -27,7 +27,7 @@ export function DashboardPage() {
         description="Track the core Phase 1 entities from one workspace shell before briefs, drafts, and reviews are layered on."
       />
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         <MetricCard
           hint="Brands you can access right now."
           label="Brands"
@@ -47,6 +47,16 @@ export function DashboardPage() {
           hint="Campaigns actively in motion."
           label="Active campaigns"
           value={summary?.active_campaign_count ?? 0}
+        />
+        <MetricCard
+          hint="Drafts created across accessible campaigns."
+          label="Drafts"
+          value={summary?.draft_count ?? 0}
+        />
+        <MetricCard
+          hint="Drafts currently waiting in the review lane."
+          label="In review"
+          value={summary?.in_review_draft_count ?? 0}
         />
       </div>
 

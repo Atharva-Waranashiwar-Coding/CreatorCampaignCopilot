@@ -44,3 +44,5 @@ class CampaignRead(BaseModel):
     created_by: int
     created_at: datetime
     updated_at: datetime
+    brief_id: int | None = None
+    draft_count: int = 0

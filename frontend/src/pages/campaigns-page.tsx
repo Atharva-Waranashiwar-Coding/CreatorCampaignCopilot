@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 
 import { PageHeader } from "../components/shared/page-header";
 import { Badge } from "../components/ui/badge";
@@ -334,6 +335,8 @@ export function CampaignsPage() {
                     <div className="flex flex-wrap items-center gap-3">
                       <h3 className="text-base font-semibold">{campaign.name}</h3>
                       <Badge tone={campaign.status === "active" ? "success" : "muted"}>{campaign.status}</Badge>
+                      <Badge tone="muted">{campaign.draft_count} drafts</Badge>
+                      {campaign.brief_id ? <Badge tone="success">brief</Badge> : null}
                     </div>
                     <p className="mt-2 text-sm text-muted-foreground">
                       {campaign.brand_name} · {campaign.project_name}
@@ -344,6 +347,15 @@ export function CampaignsPage() {
                     <p className="mt-3 text-xs uppercase tracking-[0.18em] text-muted-foreground">
                       {formatDate(campaign.start_date)} to {formatDate(campaign.end_date)}
                     </p>
+                    <div className="mt-4">
+                      <Link
+                        className="inline-flex rounded-full bg-primary px-3 py-2 text-xs font-medium text-primary-foreground"
+                        onClick={(event) => event.stopPropagation()}
+                        to={`/campaigns/${campaign.id}`}
+                      >
+                        Open workspace
+                      </Link>
+                    </div>
                   </button>
                 ))
               ) : (
@@ -356,16 +368,27 @@ export function CampaignsPage() {
 
           {selectedCampaign ? (
             <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Selected campaign</p>
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Selected campaign</p>
                   <h2 className="mt-2 text-2xl font-semibold tracking-tight">{selectedCampaign.name}</h2>
                   <p className="mt-2 text-sm text-muted-foreground">
                     {selectedCampaign.brand_name} · {selectedCampaign.project_name}
                   </p>
+                  </div>
+                  <Badge>{selectedCampaign.status}</Badge>
                 </div>
-                <Badge>{selectedCampaign.status}</Badge>
-              </div>
+
+                <div className="mt-4 flex flex-wrap gap-3">
+                  <Badge tone="muted">{selectedCampaign.draft_count} drafts</Badge>
+                  {selectedCampaign.brief_id ? <Badge tone="success">brief ready</Badge> : <Badge tone="warning">brief missing</Badge>}
+                  <Link
+                    className="inline-flex items-center rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+                    to={`/campaigns/${selectedCampaign.id}`}
+                  >
+                    Open workspace
+                  </Link>
+                </div>
 
               <form
                 className="mt-5 space-y-4"

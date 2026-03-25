@@ -7,7 +7,10 @@ import { Card } from "../components/ui/card";
 import { getCurrentUser } from "../features/auth/auth-api";
 import { useAuthStore } from "../features/auth/auth-store";
 import { DashboardPage } from "../pages/dashboard-page";
+import { DraftDetailPage } from "../pages/draft-detail-page";
+import { DraftsPage } from "../pages/drafts-page";
 import { BrandsPage } from "../pages/brands-page";
+import { CampaignOverviewPage } from "../pages/campaign-overview-page";
 import { CampaignsPage } from "../pages/campaigns-page";
 import { LoginPage } from "../pages/login-page";
 import { ProjectsPage } from "../pages/projects-page";
@@ -110,6 +113,9 @@ export function AppRouter() {
         <Route path="/brands" element={<BrandsPage />} />
         <Route path="/projects" element={<ProjectsPage />} />
         <Route path="/campaigns" element={<CampaignsPage />} />
+        <Route path="/campaigns/:campaignId" element={<CampaignOverviewPage />} />
+        <Route path="/drafts" element={<DraftsPage />} />
+        <Route path="/drafts/:draftId" element={<DraftDetailPage />} />
       </Route>
       <Route path="*" element={<NotFound />} />
     </Routes>

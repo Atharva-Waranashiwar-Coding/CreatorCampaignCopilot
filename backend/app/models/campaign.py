@@ -30,3 +30,14 @@ class Campaign(TimestampMixin, Base):
 
     project: Mapped["Project"] = relationship(back_populates="campaigns")
     creator: Mapped["User"] = relationship(foreign_keys=[created_by])
+    brief: Mapped["ContentBrief | None"] = relationship(
+        back_populates="campaign",
+        cascade="all, delete-orphan",
+        uselist=False,
+        lazy="selectin",
+    )
+    drafts: Mapped[list["ContentDraft"]] = relationship(
+        back_populates="campaign",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )

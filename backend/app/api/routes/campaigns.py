@@ -5,7 +5,15 @@ from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.campaign import CampaignCreate, CampaignRead, CampaignUpdate
-from app.services.campaigns import create_campaign, delete_campaign, get_campaign, list_campaigns, update_campaign
+from app.schemas.campaign_workspace import CampaignOverviewRead
+from app.services.campaigns import (
+    create_campaign,
+    delete_campaign,
+    get_campaign,
+    get_campaign_overview,
+    list_campaigns,
+    update_campaign,
+)
 
 router = APIRouter()
 
@@ -38,6 +46,18 @@ def create_campaign_route(
 ) -> CampaignRead:
     try:
         return create_campaign(db, payload=payload, user=current_user)
+    except Exception as exc:
+        _raise_service_error(exc)
+
+
+@router.get("/{campaign_id}/overview", response_model=CampaignOverviewRead)
+def read_campaign_overview(
+    campaign_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> CampaignOverviewRead:
+    try:
+        return get_campaign_overview(db, campaign_id=campaign_id, user=current_user)
     except Exception as exc:
         _raise_service_error(exc)
 
