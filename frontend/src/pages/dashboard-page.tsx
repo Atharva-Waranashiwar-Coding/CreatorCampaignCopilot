@@ -1,6 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
+import { Link } from "react-router-dom";
 
+import { Button } from "../components/ui/button";
 import { MetricCard } from "../components/shared/metric-card";
 import { PageHeader } from "../components/shared/page-header";
 import { Badge } from "../components/ui/badge";
@@ -8,18 +10,23 @@ import { Card } from "../components/ui/card";
 import { Select } from "../components/ui/select";
 import { useAuthStore } from "../features/auth/auth-store";
 import { apiRequest } from "../lib/api";
-import { formatDate, formatDateTime } from "../lib/format";
+import { formatDate, formatDateTime, formatStatusLabel } from "../lib/format";
 import type {
   Brand,
   DashboardAnalytics,
+  DashboardCampaignHealth,
+  DashboardCampaignHealthReport,
   DashboardCountBucket,
   DashboardDateBucket,
+  DashboardMemberBucket,
+  DashboardRevisionCycleItem,
   DashboardSummary,
 } from "../lib/types";
 
 export function DashboardPage() {
   const token = useAuthStore((state) => state.token);
   const [brandFilter, setBrandFilter] = useState("all");
+  const [mixInterval, setMixInterval] = useState<"week" | "month">("month");
 
   const brandsQuery = useQuery({
     queryKey: ["brands"],
@@ -32,20 +39,37 @@ export function DashboardPage() {
   });
 
   const analyticsQuery = useQuery({
-    queryKey: ["dashboard-analytics", brandFilter],
+    queryKey: ["dashboard-analytics", brandFilter, mixInterval],
     queryFn: () =>
-      apiRequest<DashboardAnalytics>(buildDashboardPath("/dashboard/analytics", brandFilter), {}, token),
+      apiRequest<DashboardAnalytics>(
+        buildDashboardPath("/dashboard/analytics", brandFilter, { interval: mixInterval }),
+        {},
+        token,
+      ),
+  });
+
+  const campaignHealthQuery = useQuery({
+    queryKey: ["dashboard-campaign-health", brandFilter],
+    queryFn: () =>
+      apiRequest<DashboardCampaignHealthReport>(
+        buildDashboardPath("/dashboard/campaign-health", brandFilter),
+        {},
+        token,
+      ),
   });
 
   const summary = summaryQuery.data;
   const analytics = analyticsQuery.data;
+  const healthReport = campaignHealthQuery.data;
+  const atRiskCampaignCount =
+    (healthReport?.summary.at_risk_count ?? 0) + (healthReport?.summary.critical_count ?? 0);
 
   return (
     <div>
       <PageHeader
         eyebrow="Dashboard"
         title="Campaign operations with plan-aware visibility"
-        description="Track campaign health, review pressure, scheduled delivery, and workspace usage from a single operational view."
+        description="Track campaign health, team workload, approval bottlenecks, content mix, and scheduled delivery from a single operational view."
         actions={(
           <Select
             className="min-w-[220px]"
@@ -103,6 +127,64 @@ export function DashboardPage() {
           label="Templates"
           value={summary?.template_count ?? 0}
         />
+        <MetricCard
+          hint="Average campaign health score across the current dashboard scope."
+          label="Avg health"
+          value={Math.round(healthReport?.summary.average_score ?? 0)}
+        />
+        <MetricCard
+          hint="Campaigns currently flagged as at risk or critical."
+          label="At-risk campaigns"
+          value={atRiskCampaignCount}
+        />
+      </div>
+
+      <div className="mt-8 grid gap-6 xl:grid-cols-2">
+        <HealthSummaryCard
+          averageScore={healthReport?.summary.average_score ?? 0}
+          criticalCount={healthReport?.summary.critical_count ?? 0}
+          healthyCount={healthReport?.summary.healthy_count ?? 0}
+          isLoading={campaignHealthQuery.isLoading}
+          watchCount={healthReport?.summary.watch_count ?? 0}
+          atRiskCount={healthReport?.summary.at_risk_count ?? 0}
+        />
+        <CampaignHealthListCard
+          campaigns={healthReport?.campaigns ?? []}
+          isLoading={campaignHealthQuery.isLoading}
+        />
+      </div>
+
+      <div className="mt-8 grid gap-6 xl:grid-cols-3">
+        <MemberLoadCard
+          eyebrow="Workload"
+          items={analytics?.workload.drafts_by_member ?? []}
+          isLoading={analyticsQuery.isLoading}
+          subtitle="Open draft assignments by team member, including overdue and due-soon load."
+          title="Draft ownership"
+        />
+        <MemberLoadCard
+          eyebrow="Reviews"
+          items={analytics?.workload.pending_reviews_by_reviewer ?? []}
+          isLoading={analyticsQuery.isLoading}
+          subtitle="Open review-task assignments routed to reviewers."
+          title="Reviewer queue"
+        />
+        <BottleneckCard
+          isLoading={analyticsQuery.isLoading}
+          items={analytics?.workload.bottlenecks_by_status ?? []}
+        />
+      </div>
+
+      <div className="mt-8 grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+        <ApprovalInsightsCard
+          approvals={analytics?.approvals}
+          isLoading={analyticsQuery.isLoading}
+        />
+        <RevisionCyclesCard
+          drafts={analytics?.approvals.drafts_with_multiple_revision_cycles ?? []}
+          isLoading={analyticsQuery.isLoading}
+          totalCount={analytics?.approvals.multi_revision_draft_count ?? 0}
+        />
       </div>
 
       <div className="mt-8 grid gap-6 xl:grid-cols-2">
@@ -136,13 +218,67 @@ export function DashboardPage() {
         />
       </div>
 
+      <div className="mt-8 grid gap-6 xl:grid-cols-2">
+        <BreakdownCard
+          eyebrow="Content mix"
+          title="Platforms in flight"
+          subtitle="Where current draft output is concentrated by channel."
+          buckets={analytics?.content_mix.by_platform ?? []}
+          isLoading={analyticsQuery.isLoading}
+        />
+        <BreakdownCard
+          eyebrow="Content mix"
+          title="Content types in flight"
+          subtitle="What kinds of deliverables are being produced."
+          buckets={analytics?.content_mix.by_content_type ?? []}
+          isLoading={analyticsQuery.isLoading}
+        />
+        <BreakdownCard
+          eyebrow="Content mix"
+          title="Drafts by campaign status"
+          subtitle="How content production maps onto campaign execution state."
+          buckets={analytics?.content_mix.by_campaign_status ?? []}
+          isLoading={analyticsQuery.isLoading}
+        />
+        <div>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Content mix</p>
+              <h2 className="mt-2 text-2xl font-semibold tracking-tight">Output over time</h2>
+            </div>
+            <div className="inline-flex rounded-full bg-muted/70 p-1">
+              {(["week", "month"] as const).map((interval) => (
+                <Button
+                  key={interval}
+                  className={mixInterval === interval ? "" : "bg-transparent text-foreground hover:bg-white/60"}
+                  onClick={() => setMixInterval(interval)}
+                  type="button"
+                  variant={mixInterval === interval ? "primary" : "ghost"}
+                >
+                  {interval === "week" ? "Weekly" : "Monthly"}
+                </Button>
+              ))}
+            </div>
+          </div>
+          <TimelineCard
+            eyebrow="Volume"
+            title="Draft creation trend"
+            subtitle={`Draft count grouped by ${mixInterval === "week" ? "week" : "month"} using draft creation date.`}
+            buckets={analytics?.content_mix.by_interval ?? []}
+            isLoading={analyticsQuery.isLoading}
+          />
+        </div>
+      </div>
+
       <Card className="mt-8 border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
         <div className="flex items-center justify-between gap-4">
           <div>
             <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Recent activity</p>
             <h2 className="mt-2 text-2xl font-semibold tracking-tight">Audit trail basics</h2>
           </div>
-          {summaryQuery.isFetching || analyticsQuery.isFetching ? <Badge tone="muted">Refreshing</Badge> : null}
+          {summaryQuery.isFetching || analyticsQuery.isFetching || campaignHealthQuery.isFetching ? (
+            <Badge tone="muted">Refreshing</Badge>
+          ) : null}
         </div>
 
         {summaryQuery.isLoading ? (
@@ -172,6 +308,313 @@ export function DashboardPage() {
           </p>
         )}
       </Card>
+    </div>
+  );
+}
+
+function HealthSummaryCard({
+  averageScore,
+  healthyCount,
+  watchCount,
+  atRiskCount,
+  criticalCount,
+  isLoading,
+}: {
+  averageScore: number;
+  healthyCount: number;
+  watchCount: number;
+  atRiskCount: number;
+  criticalCount: number;
+  isLoading: boolean;
+}) {
+  return (
+    <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
+      <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Campaign health</p>
+      <h2 className="mt-2 text-2xl font-semibold tracking-tight">Portfolio score</h2>
+      <p className="mt-3 text-sm text-muted-foreground">
+        Transparent scoring starts at 100 and subtracts penalties for overdue drafts, pending approvals, missing assets, unassigned work, and near-term deadline pressure.
+      </p>
+
+      {isLoading ? (
+        <p className="mt-6 text-sm text-muted-foreground">Loading campaign health...</p>
+      ) : (
+        <div className="mt-6">
+          <div className="flex items-end gap-4">
+            <p className="text-5xl font-semibold tracking-tight">{Math.round(averageScore)}</p>
+            <Badge tone={healthTone(averageScore >= 85 ? "healthy" : averageScore >= 70 ? "watch" : averageScore >= 50 ? "at_risk" : "critical")}>
+              average score
+            </Badge>
+          </div>
+
+          <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <HealthCountPill label="Healthy" tone="success" value={healthyCount} />
+            <HealthCountPill label="Watch" tone="warning" value={watchCount} />
+            <HealthCountPill label="At risk" tone="warning" value={atRiskCount} />
+            <HealthCountPill label="Critical" tone="warning" value={criticalCount} />
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function CampaignHealthListCard({
+  campaigns,
+  isLoading,
+}: {
+  campaigns: DashboardCampaignHealth[];
+  isLoading: boolean;
+}) {
+  return (
+    <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Campaign health</p>
+          <h2 className="mt-2 text-2xl font-semibold tracking-tight">Why scores moved</h2>
+        </div>
+        <Badge tone="muted">{campaigns.length} campaigns</Badge>
+      </div>
+
+      {isLoading ? (
+        <p className="mt-6 text-sm text-muted-foreground">Loading scored campaigns...</p>
+      ) : campaigns.length ? (
+        <div className="mt-6 space-y-4">
+          {campaigns.slice(0, 6).map((campaign) => (
+            <div key={campaign.campaign_id} className="rounded-[1.25rem] border border-border bg-white/80 px-4 py-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Link className="text-base font-semibold text-foreground hover:text-primary" to={`/campaigns/${campaign.campaign_id}`}>
+                      {campaign.campaign_name}
+                    </Link>
+                    <Badge tone={healthTone(campaign.label)}>{campaign.label.replace("_", " ")}</Badge>
+                    <Badge tone="muted">{campaign.project_name}</Badge>
+                  </div>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    {campaign.brand_name} · {formatStatusLabel(campaign.campaign_status)}
+                    {campaign.next_deadline_at ? ` · Next deadline ${formatDateTime(campaign.next_deadline_at)}` : ""}
+                  </p>
+                </div>
+
+                <div className="text-right">
+                  <p className="text-3xl font-semibold tracking-tight">{campaign.score}</p>
+                  <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">score</p>
+                </div>
+              </div>
+
+              <div className="mt-4 h-2 rounded-full bg-slate-200/80">
+                <div
+                  className="h-full rounded-full bg-[linear-gradient(90deg,rgba(12,86,102,0.95),rgba(26,132,153,0.85))]"
+                  style={{ width: `${campaign.score}%` }}
+                />
+              </div>
+
+              {campaign.factors.length ? (
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {campaign.factors.map((factor) => (
+                    <Badge key={factor.key} tone="warning">
+                      -{factor.penalty} {factor.label.toLowerCase()} ({factor.count})
+                    </Badge>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-4 text-sm text-muted-foreground">
+                  No active health penalties. The campaign has no overdue, approval, asset, assignment, or deadline pressure flags.
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-6 text-sm text-muted-foreground">Campaign health will appear here once campaigns exist in the current scope.</p>
+      )}
+    </Card>
+  );
+}
+
+function MemberLoadCard({
+  eyebrow,
+  items,
+  isLoading,
+  subtitle,
+  title,
+}: {
+  eyebrow: string;
+  items: DashboardMemberBucket[];
+  isLoading: boolean;
+  subtitle: string;
+  title: string;
+}) {
+  return (
+    <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
+      <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">{eyebrow}</p>
+      <h2 className="mt-2 text-2xl font-semibold tracking-tight">{title}</h2>
+      <p className="mt-3 text-sm text-muted-foreground">{subtitle}</p>
+
+      {isLoading ? (
+        <p className="mt-6 text-sm text-muted-foreground">Loading workload...</p>
+      ) : items.length ? (
+        <div className="mt-6 space-y-3">
+          {items.map((item) => (
+            <div key={`${item.user_id}-${item.email}`} className="rounded-[1.25rem] border border-border bg-white/80 px-4 py-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-foreground">{item.name}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">{item.email}</p>
+                </div>
+                <Badge tone="muted">{item.count} open</Badge>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Badge tone={item.overdue_count ? "warning" : "muted"}>{item.overdue_count} overdue</Badge>
+                <Badge tone={item.due_soon_count ? "warning" : "muted"}>{item.due_soon_count} due soon</Badge>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-6 text-sm text-muted-foreground">No open assignments are currently tracked in this section.</p>
+      )}
+    </Card>
+  );
+}
+
+function BottleneckCard({
+  items,
+  isLoading,
+}: {
+  items: DashboardAnalytics["workload"]["bottlenecks_by_status"];
+  isLoading: boolean;
+}) {
+  return (
+    <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
+      <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Bottlenecks</p>
+      <h2 className="mt-2 text-2xl font-semibold tracking-tight">Status drag</h2>
+      <p className="mt-3 text-sm text-muted-foreground">
+        Drafts grouped by current status, with stale counts based on drafts that have not moved in more than three days.
+      </p>
+
+      {isLoading ? (
+        <p className="mt-6 text-sm text-muted-foreground">Loading bottlenecks...</p>
+      ) : items.length ? (
+        <div className="mt-6 space-y-3">
+          {items.map((item) => (
+            <div key={item.status} className="rounded-[1.25rem] border border-border bg-white/80 px-4 py-4">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-semibold text-foreground">{item.label}</p>
+                <Badge tone="muted">{item.count}</Badge>
+              </div>
+              <p className="mt-2 text-sm text-muted-foreground">{item.stale_count} stale in this status</p>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-6 text-sm text-muted-foreground">No draft bottlenecks are currently visible.</p>
+      )}
+    </Card>
+  );
+}
+
+function ApprovalInsightsCard({
+  approvals,
+  isLoading,
+}: {
+  approvals: DashboardAnalytics["approvals"] | undefined;
+  isLoading: boolean;
+}) {
+  return (
+    <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
+      <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Approval analytics</p>
+      <h2 className="mt-2 text-2xl font-semibold tracking-tight">Turnaround and decision quality</h2>
+      <p className="mt-3 text-sm text-muted-foreground">
+        Review timing is calculated from `submitted` or `resubmitted` to the next approval or rejection event.
+      </p>
+
+      {isLoading ? (
+        <p className="mt-6 text-sm text-muted-foreground">Loading approval analytics...</p>
+      ) : (
+        <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <StatCard label="Avg review time" value={`${approvals?.average_review_time_hours ?? 0}h`} />
+          <StatCard label="Avg approval time" value={`${approvals?.average_approval_time_hours ?? 0}h`} />
+          <StatCard label="Rejection rate" value={`${approvals?.rejection_rate ?? 0}%`} />
+          <StatCard label="Decisions" value={approvals?.decision_count ?? 0} />
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function RevisionCyclesCard({
+  drafts,
+  isLoading,
+  totalCount,
+}: {
+  drafts: DashboardRevisionCycleItem[];
+  isLoading: boolean;
+  totalCount: number;
+}) {
+  return (
+    <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Revision cycles</p>
+          <h2 className="mt-2 text-2xl font-semibold tracking-tight">Drafts needing repeat loops</h2>
+        </div>
+        <Badge tone="muted">{totalCount} drafts</Badge>
+      </div>
+
+      {isLoading ? (
+        <p className="mt-6 text-sm text-muted-foreground">Loading revision history...</p>
+      ) : drafts.length ? (
+        <div className="mt-6 space-y-3">
+          {drafts.map((draft) => (
+            <div key={draft.draft_id} className="rounded-[1.25rem] border border-border bg-white/80 px-4 py-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <Link className="text-sm font-semibold text-foreground hover:text-primary" to={`/drafts/${draft.draft_id}`}>
+                    {draft.draft_title}
+                  </Link>
+                  <p className="mt-1 text-sm text-muted-foreground">{draft.campaign_name}</p>
+                </div>
+                <Badge tone={draft.rejection_count ? "warning" : "muted"}>
+                  {draft.revision_cycle_count} cycles · {draft.rejection_count} rejections
+                </Badge>
+              </div>
+              <p className="mt-3 text-sm text-muted-foreground">Current status: {formatStatusLabel(draft.status)}</p>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-6 text-sm text-muted-foreground">No drafts have crossed multiple revision cycles yet.</p>
+      )}
+    </Card>
+  );
+}
+
+function HealthCountPill({
+  label,
+  tone,
+  value,
+}: {
+  label: string;
+  tone: "success" | "warning" | "muted";
+  value: number;
+}) {
+  return (
+    <div className="rounded-[1.2rem] border border-border bg-white/80 px-4 py-4">
+      <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">{label}</p>
+      <div className="mt-3 flex items-center gap-3">
+        <p className="text-2xl font-semibold tracking-tight">{value}</p>
+        <Badge tone={tone}>{label}</Badge>
+      </div>
+    </div>
+  );
+}
+
+function StatCard({ label, value }: { label: string; value: number | string }) {
+  return (
+    <div className="rounded-[1.2rem] border border-border bg-white/80 px-4 py-4">
+      <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">{label}</p>
+      <p className="mt-3 text-2xl font-semibold tracking-tight">{value}</p>
     </div>
   );
 }
@@ -274,11 +717,23 @@ function TimelineCard({
   );
 }
 
-function buildDashboardPath(basePath: string, brandFilter: string) {
-  if (brandFilter === "all") {
+function buildDashboardPath(basePath: string, brandFilter: string, extraParams?: Record<string, string>) {
+  const params = new URLSearchParams(extraParams);
+  if (brandFilter !== "all") {
+    params.set("brand_id", brandFilter);
+  }
+  if (!params.toString()) {
     return basePath;
   }
-
-  const params = new URLSearchParams({ brand_id: brandFilter });
   return `${basePath}?${params.toString()}`;
+}
+
+function healthTone(label: string): "success" | "warning" | "muted" {
+  if (label === "healthy") {
+    return "success";
+  }
+  if (label === "watch" || label === "at_risk" || label === "critical") {
+    return "warning";
+  }
+  return "muted";
 }
