@@ -4,9 +4,11 @@ from app.core.enums import DraftReviewAction, DraftStatus
 from app.core.permissions import REVIEW_WORKFLOW_ROLES, WORKSPACE_MANAGEMENT_ROLES, require_role
 from app.models.draft_review import DraftReview
 from app.models.user import User
+from app.schemas.collaboration_comment import MentionRead
 from app.schemas.content_draft import ContentDraftRead
 from app.schemas.draft_review import DraftReviewCreate, DraftReviewDecision, DraftReviewRead, DraftReviewThreadRead
 from app.services.audit import record_audit_log
+from app.services.collaboration import create_review_mentions, serialize_mention
 from app.services.drafts import (
     _coerce_status,
     _create_version_snapshot,
@@ -25,6 +27,7 @@ def _serialize_review(review: DraftReview) -> DraftReviewRead:
         actor_name=review.actor.full_name if review.actor else None,
         action=review.action,
         comment=review.comment,
+        mentions=[serialize_mention(mention) for mention in review.mentions],
         version_number=review.version_number,
         from_status=_coerce_status(review.from_status) if review.from_status is not None else None,
         to_status=_coerce_status(review.to_status) if review.to_status is not None else None,
@@ -79,6 +82,13 @@ def _create_review_entry(
     )
     db.add(review)
     db.flush()
+    if review.comment:
+        create_review_mentions(
+            db,
+            brand_id=draft.campaign.project.brand_id,
+            author_user_id=actor_user_id,
+            review=review,
+        )
     return review
 
 

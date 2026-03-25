@@ -11,6 +11,7 @@ from app.models.campaign import Campaign
 from app.models.content_draft import ContentDraft
 from app.models.draft_review import DraftReview
 from app.models.draft_version import DraftVersion
+from app.models.mention import Mention
 from app.models.project import Project
 from app.models.user import User
 from app.schemas.content_draft import ContentDraftCreate, ContentDraftRead, ContentDraftUpdate
@@ -114,6 +115,7 @@ def _get_draft_with_role(db: Session, *, draft_id: int, user_id: int) -> tuple[C
             selectinload(ContentDraft.campaign).selectinload(Campaign.project).selectinload(Project.brand),
             joinedload(ContentDraft.creator),
             selectinload(ContentDraft.reviews).joinedload(DraftReview.actor),
+            selectinload(ContentDraft.reviews).selectinload(DraftReview.mentions).joinedload(Mention.mentioned_user),
             selectinload(ContentDraft.versions).joinedload(DraftVersion.creator),
             selectinload(ContentDraft.calendar_item),
         )

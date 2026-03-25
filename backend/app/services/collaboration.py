@@ -3,14 +3,18 @@ from __future__ import annotations
 import re
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.core.enums import CommentEntityType, MembershipStatus
 from app.models.brand_membership import BrandMembership
 from app.models.campaign import Campaign
+from app.models.collaboration_comment import CollaborationComment
 from app.models.content_draft import ContentDraft
+from app.models.draft_review import DraftReview
+from app.models.mention import Mention
 from app.models.project import Project
 from app.models.user import User
+from app.schemas.collaboration_comment import CollaborationCommentRead, MentionRead
 from app.services.brands import get_membership_for_brand
 
 MENTION_PATTERN = re.compile(r"(?<!\w)@([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})")
@@ -43,6 +47,101 @@ def resolve_mentioned_users(db: Session, *, brand_id: int, value: str | None) ->
         .order_by(User.full_name.asc())
     ).all()
     return rows
+
+
+def serialize_mention(mention: Mention) -> MentionRead:
+    return MentionRead(
+        id=mention.id,
+        mentioned_user_id=mention.mentioned_user_id,
+        mentioned_user_name=mention.mentioned_user.full_name if mention.mentioned_user else "",
+        mentioned_user_email=mention.mentioned_user.email if mention.mentioned_user else mention.identifier,
+        identifier=mention.identifier,
+        created_at=mention.created_at,
+    )
+
+
+def serialize_comment_tree(comments: list[CollaborationComment]) -> list[CollaborationCommentRead]:
+    nodes = {
+        comment.id: CollaborationCommentRead(
+            id=comment.id,
+            brand_id=comment.brand_id,
+            entity_type=comment.entity_type,
+            entity_id=comment.entity_id,
+            campaign_id=comment.campaign_id,
+            draft_id=comment.draft_id,
+            parent_comment_id=comment.parent_comment_id,
+            author_user_id=comment.author_user_id,
+            author_name=comment.author.full_name if comment.author else None,
+            body=comment.body,
+            mentions=[serialize_mention(mention) for mention in comment.mentions],
+            created_at=comment.created_at,
+            updated_at=comment.updated_at,
+            replies=[],
+        )
+        for comment in comments
+    }
+
+    roots: list[CollaborationCommentRead] = []
+    for comment in comments:
+        node = nodes[comment.id]
+        if comment.parent_comment_id and comment.parent_comment_id in nodes:
+            nodes[comment.parent_comment_id].replies.append(node)
+        else:
+            roots.append(node)
+
+    return roots
+
+
+def create_comment_mentions(
+    db: Session,
+    *,
+    brand_id: int,
+    author_user_id: int,
+    comment: CollaborationComment,
+) -> list[Mention]:
+    users = resolve_mentioned_users(db, brand_id=brand_id, value=comment.body)
+    mentions: list[Mention] = []
+    for mentioned_user in users:
+        if mentioned_user.id == author_user_id:
+            continue
+        mention = Mention(
+            brand_id=brand_id,
+            author_user_id=author_user_id,
+            mentioned_user_id=mentioned_user.id,
+            identifier=mentioned_user.email.lower(),
+            comment_id=comment.id,
+            draft_review_id=None,
+        )
+        db.add(mention)
+        mentions.append(mention)
+    db.flush()
+    return mentions
+
+
+def create_review_mentions(
+    db: Session,
+    *,
+    brand_id: int,
+    author_user_id: int,
+    review: DraftReview,
+) -> list[Mention]:
+    users = resolve_mentioned_users(db, brand_id=brand_id, value=review.comment)
+    mentions: list[Mention] = []
+    for mentioned_user in users:
+        if mentioned_user.id == author_user_id:
+            continue
+        mention = Mention(
+            brand_id=brand_id,
+            author_user_id=author_user_id,
+            mentioned_user_id=mentioned_user.id,
+            identifier=mentioned_user.email.lower(),
+            comment_id=None,
+            draft_review_id=review.id,
+        )
+        db.add(mention)
+        mentions.append(mention)
+    db.flush()
+    return mentions
 
 
 def get_campaign_collaboration_context(
