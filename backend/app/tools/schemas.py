@@ -152,3 +152,23 @@ class SummarizeReviewFeedbackResponse(BaseModel):
     approvals: list[str]
     action_counts: list[ReviewActionCount]
     recent_comments: list[ReviewCommentSummary]
+
+
+class HelperToolCatalogItem(BaseModel):
+    name: str
+    mcp_tool_name: str
+    description: str
+    rest_path: str
+    http_method: str
+    target_entity_type: str
+    service_bindings: list[str]
+    mcp_exposed: bool
+
+
+class HelperToolCatalogResponse(BaseModel):
+    mcp_helpers_enabled: bool
+    mcp_runtime_available: bool
+    mcp_http_transport_enabled: bool
+    mcp_sse_transport_enabled: bool
+    mcp_mount_path: str | None = None
+    tools: list[HelperToolCatalogItem]
