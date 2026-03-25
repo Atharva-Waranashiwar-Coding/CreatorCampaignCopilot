@@ -1,6 +1,6 @@
 # Creator Campaign Copilot
 
-Phase 7 workspace for multi-brand campaign operations, collaboration workflows, helper tools, MCP exposure, templates, analytics, and subscription-aware usage controls.
+Phase 8 workspace for multi-brand campaign planning, board-based draft operations, platform previews, collaboration workflows, helper tools, MCP exposure, templates, analytics, and subscription-aware usage controls.
 
 ## Stack
 
@@ -9,7 +9,7 @@ Phase 7 workspace for multi-brand campaign operations, collaboration workflows, 
 - Database: PostgreSQL
 - Dev environment: Docker Compose
 
-## Phase 7 scope
+## Phase 8 scope
 
 - Email/password auth scaffold with JWT access tokens
 - Core backend modules for users, brands, memberships, projects, campaigns, and audit logs
@@ -36,6 +36,10 @@ Phase 7 workspace for multi-brand campaign operations, collaboration workflows, 
 - Assignment workflows for campaigns, drafts, and review tasks
 - In-app notifications for mentions, review requests, decisions, assignments, and due-soon reminders
 - Notifications center plus collaboration-aware campaign activity feed updates
+- Campaign planning workspace with board, list, and calendar switching
+- Stage-based board interactions that map onto the existing review workflow
+- Platform preview surfaces for LinkedIn, Instagram captions, email, and blog/article layouts
+- Lightweight draft-editor enhancements with quick-insert writing tools and content stats
 - Alembic migrations for Phases 1 through 7
 
 ## Quick start
@@ -69,7 +73,7 @@ The backend container runs `alembic upgrade head` before starting the FastAPI se
 - `MCP_ENABLE_SSE_TRANSPORT=false` leaves SSE off unless you explicitly need it.
 - The helper REST endpoints remain available under `/api/tools/helpers/*` even if the MCP layer is disabled.
 
-## Phase 7 workflow
+## Phase 8 workflow
 
 1. Create an account from the login page.
 2. Create a brand workspace.
@@ -92,6 +96,9 @@ The backend container runs `alembic upgrade head` before starting the FastAPI se
 19. Assign campaign, draft, or review-task ownership directly from the workspace pages.
 20. Use `@email` mentions in draft discussion, campaign discussion, and review notes.
 21. Follow collaboration events from the notifications center and campaign activity feed.
+22. Switch the campaign planner between board, list, and calendar views depending on the planning task.
+23. Drag supported draft stages across the board to move ideas into review, approve work, and advance scheduled content.
+24. Use the draft detail preview panel to inspect LinkedIn, Instagram, email, and article layouts while editing copy.
 
 ## Backend entities in this phase
 
@@ -134,6 +141,7 @@ The backend container runs `alembic upgrade head` before starting the FastAPI se
 - `/api/drafts/{draft_id}/comments`
 - `/api/drafts/{draft_id}/assignments`
 - `/api/drafts/{draft_id}/reviews`
+- `/api/drafts/{draft_id}/move-stage`
 - `/api/drafts/{draft_id}/submit`
 - `/api/drafts/{draft_id}/approve`
 - `/api/drafts/{draft_id}/reject`
@@ -151,6 +159,9 @@ The backend container runs `alembic upgrade head` before starting the FastAPI se
 - Owner membership updates and ownership transfer are intentionally deferred.
 - The frontend stores the JWT token locally and restores the session on reload.
 - Each campaign can have one brief and many drafts.
+- Campaign planning now supports board, list, and calendar views inside the campaign workspace.
+- Board stage moves intentionally route through the existing review and editorial rules rather than bypassing them.
+- Draft previews render from the existing `ContentDraft` fields instead of a separate preview-only model.
 - Reviewer approvals only operate on drafts already in `in_review`.
 - New brands receive the seeded `starter` plan by default.
 - Plan changes and template actions are recorded in the existing audit log stream.

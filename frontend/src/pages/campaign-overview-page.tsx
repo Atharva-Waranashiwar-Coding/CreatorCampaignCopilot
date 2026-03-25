@@ -343,7 +343,71 @@ export function CampaignOverviewPage() {
         }
       />
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <Card className="border-white/70 bg-white/90 p-6 shadow-xl shadow-slate-900/5">
+        <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+          <div>
+            <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Workspace snapshot</p>
+            <h2 className="mt-2 text-3xl font-semibold tracking-tight">Keep the brief, pipeline, and schedule moving together</h2>
+            <p className="mt-4 max-w-3xl text-sm leading-7 text-muted-foreground">
+              {campaign.objective
+                ? campaign.objective
+                : "This campaign still needs a sharper objective. Use the brief below to define the narrative, CTA, and channel plan before content production accelerates."}
+            </p>
+
+            <div className="mt-5 flex flex-wrap gap-2">
+              <Badge tone={campaign.status === "active" ? "success" : "muted"}>{campaign.status}</Badge>
+              <Badge tone="muted">{overview.planning_summary.total_drafts} drafts</Badge>
+              <Badge tone="muted">{overview.assets.length} assets</Badge>
+              {overview.brief?.channels.slice(0, 3).map((channel) => (
+                <Badge key={channel}>{channel}</Badge>
+              ))}
+            </div>
+
+            <div className="mt-6 grid gap-3 md:grid-cols-3">
+              <WorkspaceSummaryCard
+                hint="Ideas, active drafts, and revisions still in progress."
+                label="Backlog"
+                value={overview.planning_summary.idea_count + overview.planning_summary.draft_count + overview.planning_summary.rejected_count}
+              />
+              <WorkspaceSummaryCard
+                hint="Pieces sitting with reviewers right now."
+                label="Awaiting Review"
+                value={overview.planning_summary.in_review_count}
+              />
+              <WorkspaceSummaryCard
+                hint="Earliest scheduled publish date across the campaign."
+                label="Next Publish"
+                value={overview.planning_summary.next_planned_publish_at ? formatDateTime(overview.planning_summary.next_planned_publish_at) : "Not set"}
+              />
+            </div>
+          </div>
+
+          <div className="rounded-[1.5rem] border border-border bg-white/85 p-5">
+            <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Quick actions</p>
+            <h3 className="mt-2 text-xl font-semibold tracking-tight">Jump to the next planning move</h3>
+            <div className="mt-5 grid gap-2">
+              <QuickAction href="#campaign-brief" label="Refine the campaign brief" />
+              <QuickAction href="#campaign-composer" label="Create or update a working draft" />
+              <QuickAction href="#campaign-planner" label="Organize drafts in the planner" />
+              <QuickAction href="#campaign-assets" label="Review the asset library" />
+            </div>
+
+            <div className="mt-5 rounded-[1.25rem] bg-muted/60 px-4 py-4">
+              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Coverage</p>
+              <p className="mt-2 text-sm leading-6 text-foreground">
+                {overview.brief?.channels.length
+                  ? `Planned channels: ${overview.brief.channels.join(", ")}.`
+                  : "No channels are defined in the brief yet."}
+              </p>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                {campaign.audience ? `Audience: ${campaign.audience}` : "Audience definition is still blank."}
+              </p>
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard label="Drafts" value={overview.drafts.length} />
         <MetricCard label="Assets" value={overview.assets.length} />
         <MetricCard label="Scheduled" value={overview.schedule.length} />
@@ -351,7 +415,7 @@ export function CampaignOverviewPage() {
       </div>
 
       <div className="mt-8 grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
-        <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
+        <Card className="scroll-mt-24 border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5" id="campaign-brief">
           <div className="flex items-center justify-between gap-4">
             <div>
               <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Content brief</p>
@@ -360,10 +424,19 @@ export function CampaignOverviewPage() {
             {overview.brief ? <Badge tone="success">Saved</Badge> : <Badge tone="warning">Draft</Badge>}
           </div>
 
-          <div className="mt-4 rounded-[1.25rem] border border-border bg-white/80 p-4">
-            <p className="text-sm text-muted-foreground">{campaign.objective ?? "Objective not set yet."}</p>
-            <p className="mt-2 text-sm text-muted-foreground">{campaign.audience ?? "Audience not set yet."}</p>
-          </div>
+          {campaign.objective || campaign.audience ? (
+            <div className="mt-4 rounded-[1.25rem] border border-border bg-white/80 p-4">
+              <p className="text-sm text-muted-foreground">{campaign.objective ?? "Objective not set yet."}</p>
+              <p className="mt-2 text-sm text-muted-foreground">{campaign.audience ?? "Audience not set yet."}</p>
+            </div>
+          ) : (
+            <div className="mt-4 rounded-[1.25rem] border border-dashed border-border bg-white/80 p-4">
+              <p className="text-sm font-medium text-foreground">Start by setting the core brief signal</p>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                Add an objective, audience, and channel plan so creators know what this campaign needs to achieve before the copy starts branching into channel-specific drafts.
+              </p>
+            </div>
+          )}
 
           <form
             className="mt-5 space-y-4"
@@ -431,7 +504,7 @@ export function CampaignOverviewPage() {
         </Card>
 
         <div className="space-y-6">
-          <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
+          <Card className="scroll-mt-24 border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5" id="campaign-composer">
             <div className="flex items-center justify-between gap-4">
               <div>
                 <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Draft pipeline</p>
@@ -522,7 +595,7 @@ export function CampaignOverviewPage() {
       </div>
 
       <div className="mt-8 grid gap-6 xl:grid-cols-[1.02fr_0.98fr]">
-        <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
+        <Card className="scroll-mt-24 border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5" id="campaign-assets">
           <div className="flex items-center justify-between gap-4">
             <div>
               <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Asset library</p>
@@ -746,7 +819,7 @@ export function CampaignOverviewPage() {
         />
       </div>
 
-      <div className="mt-8">
+      <div className="mt-8 scroll-mt-24" id="campaign-planner">
         <CampaignPlanner
           currentUserRole={currentMembership?.role}
           drafts={overview.drafts}
@@ -823,6 +896,35 @@ function MetricCard({ label, value }: { label: string; value: string | number })
       <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">{label}</p>
       <p className="mt-4 text-2xl font-semibold tracking-tight">{value}</p>
     </Card>
+  );
+}
+
+function WorkspaceSummaryCard({
+  hint,
+  label,
+  value,
+}: {
+  hint: string;
+  label: string;
+  value: string | number;
+}) {
+  return (
+    <div className="rounded-[1.25rem] border border-border bg-white/80 px-4 py-4">
+      <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">{label}</p>
+      <p className="mt-3 text-2xl font-semibold tracking-tight">{value}</p>
+      <p className="mt-3 text-sm leading-6 text-muted-foreground">{hint}</p>
+    </div>
+  );
+}
+
+function QuickAction({ href, label }: { href: string; label: string }) {
+  return (
+    <a
+      className="block rounded-[1.15rem] border border-border bg-muted/40 px-4 py-3 text-sm font-medium text-foreground transition hover:bg-white"
+      href={href}
+    >
+      {label}
+    </a>
   );
 }
 
