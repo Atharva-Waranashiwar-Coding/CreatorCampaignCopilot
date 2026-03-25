@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
+import { PlatformPreview } from "../components/draft-preview/platform-preview";
 import { AssignmentPanel } from "../components/collaboration/assignment-panel";
 import { ThreadedCommentsCard } from "../components/collaboration/threaded-comments-card";
 import { PageHeader } from "../components/shared/page-header";
@@ -332,6 +333,19 @@ export function DraftDetailPage() {
         </Card>
 
         <div className="space-y-6">
+          <PlatformPreview
+            input={{
+              brandName: draft.brand_name,
+              campaignName: draft.campaign_name,
+              contentBody: form.content_body,
+              contentType: form.content_type,
+              plannedPublishAt: form.planned_publish_at,
+              platform: form.platform,
+              status: draft.status,
+              title: form.title,
+            }}
+          />
+
           <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
             <div className="flex items-center justify-between gap-4">
               <div>
