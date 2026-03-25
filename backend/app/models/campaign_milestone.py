@@ -23,7 +23,12 @@ class CampaignMilestone(TimestampMixin, Base):
         index=True,
     )
     key: Mapped[CampaignMilestoneKey] = mapped_column(
-        SAEnum(CampaignMilestoneKey, name="campaign_milestone_key", native_enum=False),
+        SAEnum(
+            CampaignMilestoneKey,
+            name="campaign_milestone_key",
+            native_enum=False,
+            values_callable=lambda enum_cls: [member.value for member in enum_cls],
+        ),
         nullable=False,
     )
     label: Mapped[str] = mapped_column(String(120), nullable=False)
