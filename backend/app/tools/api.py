@@ -6,6 +6,25 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.models.user import User
+from app.tools.advanced_schemas import (
+    AssetRecommendationRequest,
+    AssetRecommendationResponse,
+    BrandVoiceValidatorRequest,
+    BrandVoiceValidatorResponse,
+    CrossChannelAdaptationRequest,
+    CrossChannelAdaptationResponse,
+    ReviewFeedbackToRevisionChecklistRequest,
+    ReviewFeedbackToRevisionChecklistResponse,
+    TemplateRecommendationRequest,
+    TemplateRecommendationResponse,
+)
+from app.tools.advanced_services import (
+    asset_recommendation,
+    brand_voice_validator,
+    cross_channel_adaptation,
+    review_feedback_to_revision_checklist,
+    template_recommendation,
+)
 from app.tools.schemas import (
     BrandGuidelinesResponse,
     FetchBrandGuidelinesRequest,
@@ -44,6 +63,19 @@ def _resolve_invocation_source(request: Request) -> str:
     if request.headers.get("mcp-session-id") or request.headers.get("x-mcp-session-id"):
         return "mcp"
     return "rest"
+
+
+def _target_from_context(
+    *,
+    draft_id: int | None,
+    campaign_id: int | None,
+    brand_id: int,
+) -> tuple[str, int]:
+    if draft_id is not None:
+        return "content_draft", draft_id
+    if campaign_id is not None:
+        return "campaign", campaign_id
+    return "brand", brand_id
 
 
 @router.post(
@@ -258,6 +290,251 @@ def summarize_review_feedback_route(
         safe_record_tool_usage(
             db,
             tool_name="summarize_review_feedback",
+            actor_user_id=current_user.id,
+            brand_id=None,
+            target_entity_type="content_draft",
+            target_entity_id=payload.draft_id,
+            invocation_source=_resolve_invocation_source(request),
+            request_payload=payload.model_dump(mode="json"),
+            result_summary={},
+            was_successful=False,
+            error_detail=str(exc),
+        )
+        _raise_service_error(exc)
+
+
+@router.post(
+    "/brand-voice-validator",
+    response_model=BrandVoiceValidatorResponse,
+    operation_id="brand_voice_validator",
+    summary="Validate brand voice alignment",
+    description="Score draft tone against stored brand voice cues and return structured revision guidance.",
+)
+def brand_voice_validator_route(
+    payload: BrandVoiceValidatorRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> BrandVoiceValidatorResponse:
+    try:
+        result = brand_voice_validator(db, payload=payload, user=current_user)
+        target_entity_type, target_entity_id = _target_from_context(
+            draft_id=result.context.draft_id,
+            campaign_id=result.context.campaign_id,
+            brand_id=result.context.brand_id,
+        )
+        safe_record_tool_usage(
+            db,
+            tool_name="brand_voice_validator",
+            actor_user_id=current_user.id,
+            brand_id=result.context.brand_id,
+            target_entity_type=target_entity_type,
+            target_entity_id=target_entity_id,
+            invocation_source=_resolve_invocation_source(request),
+            request_payload=payload.model_dump(mode="json"),
+            result_summary=result.model_dump(mode="json"),
+            was_successful=True,
+        )
+        return result
+    except Exception as exc:
+        safe_record_tool_usage(
+            db,
+            tool_name="brand_voice_validator",
+            actor_user_id=current_user.id,
+            brand_id=payload.brand_id,
+            target_entity_type="content_draft" if payload.draft_id is not None else "brand",
+            target_entity_id=payload.draft_id if payload.draft_id is not None else payload.brand_id,
+            invocation_source=_resolve_invocation_source(request),
+            request_payload=payload.model_dump(mode="json"),
+            result_summary={},
+            was_successful=False,
+            error_detail=str(exc),
+        )
+        _raise_service_error(exc)
+
+
+@router.post(
+    "/cross-channel-adaptation",
+    response_model=CrossChannelAdaptationResponse,
+    operation_id="cross_channel_adaptation",
+    summary="Adapt copy across channels",
+    description="Transform current draft copy for a target platform without mutating the base draft.",
+)
+def cross_channel_adaptation_route(
+    payload: CrossChannelAdaptationRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> CrossChannelAdaptationResponse:
+    try:
+        result = cross_channel_adaptation(db, payload=payload, user=current_user)
+        target_entity_type, target_entity_id = _target_from_context(
+            draft_id=result.context.draft_id,
+            campaign_id=result.context.campaign_id,
+            brand_id=result.context.brand_id,
+        )
+        safe_record_tool_usage(
+            db,
+            tool_name="cross_channel_adaptation",
+            actor_user_id=current_user.id,
+            brand_id=result.context.brand_id,
+            target_entity_type=target_entity_type,
+            target_entity_id=target_entity_id,
+            invocation_source=_resolve_invocation_source(request),
+            request_payload=payload.model_dump(mode="json"),
+            result_summary=result.model_dump(mode="json"),
+            was_successful=True,
+        )
+        return result
+    except Exception as exc:
+        safe_record_tool_usage(
+            db,
+            tool_name="cross_channel_adaptation",
+            actor_user_id=current_user.id,
+            brand_id=payload.brand_id,
+            target_entity_type="content_draft" if payload.draft_id is not None else "brand",
+            target_entity_id=payload.draft_id if payload.draft_id is not None else payload.brand_id,
+            invocation_source=_resolve_invocation_source(request),
+            request_payload=payload.model_dump(mode="json"),
+            result_summary={},
+            was_successful=False,
+            error_detail=str(exc),
+        )
+        _raise_service_error(exc)
+
+
+@router.post(
+    "/template-recommendation",
+    response_model=TemplateRecommendationResponse,
+    operation_id="template_recommendation",
+    summary="Recommend templates for a draft",
+    description="Rank brand templates using current draft context and explain the strongest candidates.",
+)
+def template_recommendation_route(
+    payload: TemplateRecommendationRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> TemplateRecommendationResponse:
+    try:
+        result = template_recommendation(db, payload=payload, user=current_user)
+        target_entity_type, target_entity_id = _target_from_context(
+            draft_id=result.context.draft_id,
+            campaign_id=result.context.campaign_id,
+            brand_id=result.context.brand_id,
+        )
+        safe_record_tool_usage(
+            db,
+            tool_name="template_recommendation",
+            actor_user_id=current_user.id,
+            brand_id=result.context.brand_id,
+            target_entity_type=target_entity_type,
+            target_entity_id=target_entity_id,
+            invocation_source=_resolve_invocation_source(request),
+            request_payload=payload.model_dump(mode="json"),
+            result_summary=result.model_dump(mode="json"),
+            was_successful=True,
+        )
+        return result
+    except Exception as exc:
+        safe_record_tool_usage(
+            db,
+            tool_name="template_recommendation",
+            actor_user_id=current_user.id,
+            brand_id=payload.brand_id,
+            target_entity_type="content_draft" if payload.draft_id is not None else "brand",
+            target_entity_id=payload.draft_id if payload.draft_id is not None else payload.brand_id,
+            invocation_source=_resolve_invocation_source(request),
+            request_payload=payload.model_dump(mode="json"),
+            result_summary={},
+            was_successful=False,
+            error_detail=str(exc),
+        )
+        _raise_service_error(exc)
+
+
+@router.post(
+    "/asset-recommendation",
+    response_model=AssetRecommendationResponse,
+    operation_id="asset_recommendation",
+    summary="Recommend assets for a draft",
+    description="Rank available campaign assets against the draft context and platform-specific needs.",
+)
+def asset_recommendation_route(
+    payload: AssetRecommendationRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> AssetRecommendationResponse:
+    try:
+        result = asset_recommendation(db, payload=payload, user=current_user)
+        target_entity_type, target_entity_id = _target_from_context(
+            draft_id=result.context.draft_id,
+            campaign_id=result.context.campaign_id,
+            brand_id=result.context.brand_id,
+        )
+        safe_record_tool_usage(
+            db,
+            tool_name="asset_recommendation",
+            actor_user_id=current_user.id,
+            brand_id=result.context.brand_id,
+            target_entity_type=target_entity_type,
+            target_entity_id=target_entity_id,
+            invocation_source=_resolve_invocation_source(request),
+            request_payload=payload.model_dump(mode="json"),
+            result_summary=result.model_dump(mode="json"),
+            was_successful=True,
+        )
+        return result
+    except Exception as exc:
+        safe_record_tool_usage(
+            db,
+            tool_name="asset_recommendation",
+            actor_user_id=current_user.id,
+            brand_id=payload.brand_id,
+            target_entity_type="content_draft" if payload.draft_id is not None else "campaign",
+            target_entity_id=payload.draft_id if payload.draft_id is not None else payload.campaign_id,
+            invocation_source=_resolve_invocation_source(request),
+            request_payload=payload.model_dump(mode="json"),
+            result_summary={},
+            was_successful=False,
+            error_detail=str(exc),
+        )
+        _raise_service_error(exc)
+
+
+@router.post(
+    "/review-feedback-to-revision-checklist",
+    response_model=ReviewFeedbackToRevisionChecklistResponse,
+    operation_id="review_feedback_to_revision_checklist",
+    summary="Convert review feedback into a revision checklist",
+    description="Turn recent review comments into structured, prioritized revision steps for the current draft.",
+)
+def review_feedback_to_revision_checklist_route(
+    payload: ReviewFeedbackToRevisionChecklistRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ReviewFeedbackToRevisionChecklistResponse:
+    try:
+        result = review_feedback_to_revision_checklist(db, payload=payload, user=current_user)
+        safe_record_tool_usage(
+            db,
+            tool_name="review_feedback_to_revision_checklist",
+            actor_user_id=current_user.id,
+            brand_id=result.context.brand_id,
+            target_entity_type="content_draft",
+            target_entity_id=result.context.draft_id,
+            invocation_source=_resolve_invocation_source(request),
+            request_payload=payload.model_dump(mode="json"),
+            result_summary=result.model_dump(mode="json"),
+            was_successful=True,
+        )
+        return result
+    except Exception as exc:
+        safe_record_tool_usage(
+            db,
+            tool_name="review_feedback_to_revision_checklist",
             actor_user_id=current_user.id,
             brand_id=None,
             target_entity_type="content_draft",
