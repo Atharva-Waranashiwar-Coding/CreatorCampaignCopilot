@@ -19,14 +19,11 @@ def get_current_user(
 
     try:
         payload = decode_access_token(credentials.credentials)
-    except JWTError as exc:
+        user_id = int(payload.get("sub"))
+    except (JWTError, TypeError, ValueError) as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid access token.") from exc
 
-    user_id = payload.get("sub")
-    if user_id is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid access token.")
-
-    user = db.get(User, int(user_id))
+    user = db.get(User, user_id)
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found.")
 
