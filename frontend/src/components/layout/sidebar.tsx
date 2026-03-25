@@ -11,6 +11,7 @@ const navItems = [
   { label: "Drafts", to: "/drafts" },
   { label: "Review Queue", to: "/reviews" },
   { label: "Templates", to: "/templates" },
+  { label: "Helper Tools", to: "/tools" },
   { label: "Billing", to: "/billing" },
 ];
 

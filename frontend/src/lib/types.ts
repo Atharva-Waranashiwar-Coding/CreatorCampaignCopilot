@@ -362,6 +362,43 @@ export type FeatureAccess = {
   enabled: boolean;
 };
 
+export type HelperToolCatalogItem = {
+  name: string;
+  mcp_tool_name: string;
+  description: string;
+  rest_path: string;
+  http_method: string;
+  target_entity_type: string;
+  service_bindings: string[];
+  mcp_exposed: boolean;
+};
+
+export type HelperToolCatalog = {
+  mcp_helpers_enabled: boolean;
+  mcp_runtime_available: boolean;
+  mcp_http_transport_enabled: boolean;
+  mcp_sse_transport_enabled: boolean;
+  mcp_mount_path: string | null;
+  tools: HelperToolCatalogItem[];
+};
+
+export type ToolUsageLog = {
+  id: number;
+  tool_name: string;
+  actor_user_id: number;
+  actor_name: string | null;
+  brand_id: number | null;
+  brand_name: string | null;
+  target_entity_type: string;
+  target_entity_id: number | null;
+  invocation_source: string;
+  was_successful: boolean;
+  error_detail: string | null;
+  request_payload: Record<string, unknown>;
+  result_summary: Record<string, unknown>;
+  created_at: string;
+};
+
 export type BrandBillingSnapshot = {
   brand_id: number;
   brand_name: string;

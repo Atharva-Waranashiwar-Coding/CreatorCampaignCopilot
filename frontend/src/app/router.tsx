@@ -14,6 +14,7 @@ import { BrandsPage } from "../pages/brands-page";
 import { CalendarPage } from "../pages/calendar-page";
 import { CampaignOverviewPage } from "../pages/campaign-overview-page";
 import { CampaignsPage } from "../pages/campaigns-page";
+import { HelperToolsPage } from "../pages/helper-tools-page";
 import { LoginPage } from "../pages/login-page";
 import { ProjectsPage } from "../pages/projects-page";
 import { ReviewQueuePage } from "../pages/review-queue-page";
@@ -123,6 +124,7 @@ export function AppRouter() {
         <Route path="/drafts/:draftId" element={<DraftDetailPage />} />
         <Route path="/reviews" element={<ReviewQueuePage />} />
         <Route path="/templates" element={<TemplatesPage />} />
+        <Route path="/tools" element={<HelperToolsPage />} />
         <Route path="/billing" element={<BillingPage />} />
       </Route>
       <Route path="*" element={<NotFound />} />

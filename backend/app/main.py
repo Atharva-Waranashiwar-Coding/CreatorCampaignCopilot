@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.router import api_router
 from app.core.config import settings
+from app.tools.mcp import mount_mcp_server
 
 app = FastAPI(title=settings.project_name)
 
@@ -15,3 +16,4 @@ app.add_middleware(
 )
 
 app.include_router(api_router, prefix=settings.api_prefix)
+mount_mcp_server(app)

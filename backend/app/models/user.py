@@ -21,3 +21,4 @@ class User(TimestampMixin, Base):
     draft_versions: Mapped[list["DraftVersion"]] = relationship(lazy="selectin")
     calendar_items: Mapped[list["CalendarItem"]] = relationship(lazy="selectin")
     content_templates: Mapped[list["ContentTemplate"]] = relationship(lazy="selectin")
+    tool_usage_logs: Mapped[list["ToolUsageLog"]] = relationship(back_populates="actor", lazy="selectin")

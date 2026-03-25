@@ -1,6 +1,6 @@
 # Creator Campaign Copilot
 
-Phase 5 workspace for multi-brand campaign operations, templates, analytics, and subscription-aware usage controls.
+Phase 6 workspace for multi-brand campaign operations, helper tools, MCP exposure, templates, analytics, and subscription-aware usage controls.
 
 ## Stack
 
@@ -9,7 +9,7 @@ Phase 5 workspace for multi-brand campaign operations, templates, analytics, and
 - Database: PostgreSQL
 - Dev environment: Docker Compose
 
-## Phase 5 scope
+## Phase 6 scope
 
 - Email/password auth scaffold with JWT access tokens
 - Core backend modules for users, brands, memberships, projects, campaigns, and audit logs
@@ -28,7 +28,10 @@ Phase 5 workspace for multi-brand campaign operations, templates, analytics, and
 - Brand billing/settings page with plan details, upgrade prompts, and recent plan audit events
 - Content template model and CRUD workflow
 - Dashboard analytics for campaign status, draft pipeline, review activity, and schedule pressure
-- Alembic migrations for Phases 1 through 5
+- Internal helper tools for brand guidelines, templates, content validation, campaign assets, and review summaries
+- Optional FastAPI-MCP exposure isolated behind helper-tool routes
+- Tool usage logging and admin visibility for helper tool availability and recent executions
+- Alembic migrations for Phases 1 through 6
 
 ## Quick start
 
@@ -49,10 +52,19 @@ Phase 5 workspace for multi-brand campaign operations, templates, analytics, and
 - Frontend: `http://localhost:5173`
 - Backend API: `http://localhost:8000/api`
 - Health check: `http://localhost:8000/api/healthz`
+- MCP HTTP mount: `http://localhost:8000/mcp`
 
 The backend container runs `alembic upgrade head` before starting the FastAPI server.
 
-## Phase 5 workflow
+## MCP helper configuration
+
+- `MCP_HELPERS_ENABLED=true` keeps the helper MCP server mounted.
+- `MCP_MOUNT_PATH=/mcp` controls the shared MCP mount path.
+- `MCP_ENABLE_HTTP_TRANSPORT=true` enables streamable HTTP transport.
+- `MCP_ENABLE_SSE_TRANSPORT=false` leaves SSE off unless you explicitly need it.
+- The helper REST endpoints remain available under `/api/tools/helpers/*` even if the MCP layer is disabled.
+
+## Phase 6 workflow
 
 1. Create an account from the login page.
 2. Create a brand workspace.
@@ -70,6 +82,8 @@ The backend container runs `alembic upgrade head` before starting the FastAPI se
 14. Filter drafts by campaign, platform, status, or search term.
 15. Invite additional members from the brand page.
 16. Upgrade or rebalance the brand plan as usage approaches current limits.
+17. Review the helper tool catalog and recent tool activity from the Helper Tools page.
+18. Use the helper routes directly or through the MCP mount when an MCP client is configured.
 
 ## Backend entities in this phase
 
@@ -87,6 +101,7 @@ The backend container runs `alembic upgrade head` before starting the FastAPI se
 - `draft_versions`
 - `calendar_items`
 - `audit_logs`
+- `tool_usage_logs`
 
 ## API areas
 
@@ -108,6 +123,9 @@ The backend container runs `alembic upgrade head` before starting the FastAPI se
 - `/api/drafts/{draft_id}/reject`
 - `/api/drafts/{draft_id}/resubmit`
 - `/api/templates`
+- `/api/tools/helpers`
+- `/api/tools/catalog`
+- `/api/tools/usage`
 
 ## Notes
 
@@ -119,3 +137,5 @@ The backend container runs `alembic upgrade head` before starting the FastAPI se
 - New brands receive the seeded `starter` plan by default.
 - Plan changes and template actions are recorded in the existing audit log stream.
 - Usage checks are currently enforced for member count, active campaigns, upcoming scheduled items, and template count.
+- The MCP layer is optional. Base product routes remain available even if MCP is disabled or `fastapi-mcp` is unavailable at runtime.
+- Helper tool usage is recorded in `tool_usage_logs` with request, result summary, success state, and target metadata.
