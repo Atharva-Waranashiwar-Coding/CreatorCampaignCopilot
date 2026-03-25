@@ -10,6 +10,8 @@ const navItems = [
   { label: "Calendar", to: "/calendar" },
   { label: "Drafts", to: "/drafts" },
   { label: "Review Queue", to: "/reviews" },
+  { label: "Templates", to: "/templates" },
+  { label: "Billing", to: "/billing" },
 ];
 
 type SidebarProps = {
