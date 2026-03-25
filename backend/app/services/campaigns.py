@@ -7,15 +7,21 @@ from app.core.enums import CampaignStatus, DraftStatus, MembershipStatus
 from app.core.permissions import WORKSPACE_MANAGEMENT_ROLES, require_role
 from app.models.audit_log import AuditLog
 from app.models.brand_membership import BrandMembership
+from app.models.calendar_item import CalendarItem
 from app.models.campaign import Campaign
+from app.models.campaign_asset import CampaignAsset
 from app.models.content_draft import ContentDraft
+from app.models.draft_version import DraftVersion
 from app.models.project import Project
 from app.models.user import User
 from app.schemas.audit_log import AuditLogRead
+from app.schemas.calendar_item import CalendarItemRead
 from app.schemas.campaign import CampaignCreate, CampaignRead, CampaignUpdate
+from app.schemas.campaign_asset import CampaignAssetRead
 from app.schemas.campaign_workspace import CampaignOverviewRead
 from app.schemas.content_brief import ContentBriefRead
 from app.schemas.content_draft import ContentDraftRead, DraftStatusCount
+from app.schemas.draft_version import DraftVersionRead
 from app.services.audit import record_audit_log
 
 
@@ -45,6 +51,74 @@ def _serialize_campaign(campaign: Campaign) -> CampaignRead:
     )
 
 
+def _serialize_asset(asset: CampaignAsset) -> CampaignAssetRead:
+    return CampaignAssetRead(
+        id=asset.id,
+        campaign_id=asset.campaign_id,
+        name=asset.name,
+        asset_type=asset.asset_type,
+        file_url=asset.file_url,
+        thumbnail_url=asset.thumbnail_url,
+        mime_type=asset.mime_type,
+        file_size_bytes=asset.file_size_bytes,
+        notes=asset.notes,
+        created_by=asset.created_by,
+        creator_name=asset.creator.full_name if asset.creator else None,
+        created_at=asset.created_at,
+        updated_at=asset.updated_at,
+    )
+
+
+def _serialize_calendar_item(item: CalendarItem) -> CalendarItemRead:
+    return CalendarItemRead(
+        id=item.id,
+        brand_id=item.brand_id,
+        brand_name=item.campaign.project.brand.name,
+        campaign_id=item.campaign_id,
+        campaign_name=item.campaign.name,
+        draft_id=item.draft_id,
+        draft_title=item.draft.title if item.draft else None,
+        title=item.title,
+        platform=item.platform,
+        item_type=item.item_type,
+        scheduled_for=item.scheduled_for,
+        status=item.status,
+        notes=item.notes,
+        created_by=item.created_by,
+        creator_name=item.creator.full_name if item.creator else None,
+        created_at=item.created_at,
+        updated_at=item.updated_at,
+    )
+
+
+def _serialize_draft_version(version: DraftVersion) -> DraftVersionRead:
+    draft = version.draft
+    campaign = draft.campaign
+    project = campaign.project
+    return DraftVersionRead(
+        id=version.id,
+        draft_id=version.draft_id,
+        draft_title=draft.title,
+        campaign_id=campaign.id,
+        campaign_name=campaign.name,
+        project_id=project.id,
+        project_name=project.name,
+        brand_id=project.brand_id,
+        brand_name=project.brand.name,
+        version_number=version.version_number,
+        title=version.title,
+        platform=version.platform,
+        content_type=version.content_type,
+        content_body=version.content_body,
+        status=_coerce_draft_status(version.status),
+        planned_publish_at=version.planned_publish_at,
+        change_summary=version.change_summary,
+        created_by=version.created_by,
+        creator_name=version.creator.full_name if version.creator else None,
+        created_at=version.created_at,
+    )
+
+
 def _get_campaign_with_role(db: Session, *, campaign_id: int, user_id: int) -> tuple[Campaign, BrandMembership]:
     row = db.execute(
         select(Campaign, BrandMembership)
@@ -53,6 +127,9 @@ def _get_campaign_with_role(db: Session, *, campaign_id: int, user_id: int) -> t
         .options(
             selectinload(Campaign.project).selectinload(Project.brand),
             selectinload(Campaign.brief),
+            selectinload(Campaign.assets).joinedload(CampaignAsset.creator),
+            selectinload(Campaign.calendar_items).joinedload(CalendarItem.creator),
+            selectinload(Campaign.calendar_items).joinedload(CalendarItem.draft),
             selectinload(Campaign.drafts).selectinload(ContentDraft.creator),
             selectinload(Campaign.drafts).selectinload(ContentDraft.reviews),
         )
@@ -175,6 +252,17 @@ def get_campaign_overview(db: Session, *, campaign_id: int, user: User) -> Campa
     campaign, _ = _get_campaign_with_role(db, campaign_id=campaign_id, user_id=user.id)
     ordered_drafts = sorted(campaign.drafts, key=lambda draft: draft.created_at, reverse=True)
     status_counts = Counter(_coerce_draft_status(draft.status) for draft in ordered_drafts)
+    recent_versions = db.scalars(
+        select(DraftVersion)
+        .join(ContentDraft, ContentDraft.id == DraftVersion.draft_id)
+        .options(
+            joinedload(DraftVersion.creator),
+            joinedload(DraftVersion.draft).joinedload(ContentDraft.campaign).joinedload(Campaign.project).joinedload(Project.brand),
+        )
+        .where(ContentDraft.campaign_id == campaign.id)
+        .order_by(DraftVersion.created_at.desc())
+        .limit(12)
+    ).all()
     brand_logs = db.scalars(
         select(AuditLog)
         .options(joinedload(AuditLog.actor))
@@ -188,6 +276,9 @@ def get_campaign_overview(db: Session, *, campaign_id: int, user: User) -> Campa
         campaign=_serialize_campaign(campaign),
         brief=_serialize_brief_for_campaign(campaign),
         drafts=[_serialize_draft_for_campaign(draft) for draft in ordered_drafts],
+        assets=[_serialize_asset(asset) for asset in campaign.assets],
+        recent_versions=[_serialize_draft_version(version) for version in recent_versions],
+        schedule=[_serialize_calendar_item(item) for item in campaign.calendar_items],
         status_breakdown=[
             DraftStatusCount(status=status, count=status_counts.get(status, 0))
             for status in DraftStatus

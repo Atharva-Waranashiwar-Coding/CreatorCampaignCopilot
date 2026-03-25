@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 
@@ -9,13 +9,13 @@ import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
-import { Textarea } from "../components/ui/textarea";
 import { Select } from "../components/ui/select";
+import { Textarea } from "../components/ui/textarea";
 import { useAuthStore } from "../features/auth/auth-store";
 import { ApiError, apiRequest } from "../lib/api";
 import { formatActionLabel, formatDate, formatDateTime, formatStatusLabel } from "../lib/format";
 import { queryClient } from "../lib/query-client";
-import type { CampaignOverview, DraftStatus } from "../lib/types";
+import type { CampaignAsset, CampaignOverview, DraftStatus } from "../lib/types";
 
 const draftStatuses: DraftStatus[] = [
   "idea",
@@ -41,6 +41,16 @@ type DraftFormState = {
   planned_publish_at: string;
 };
 
+type AssetFormState = {
+  name: string;
+  asset_type: string;
+  file_url: string;
+  thumbnail_url: string;
+  mime_type: string;
+  file_size_bytes: string;
+  notes: string;
+};
+
 const emptyBriefForm: BriefFormState = {
   key_message: "",
   call_to_action: "",
@@ -59,11 +69,23 @@ const emptyDraftForm: DraftFormState = {
   planned_publish_at: "",
 };
 
+const emptyAssetForm: AssetFormState = {
+  name: "",
+  asset_type: "",
+  file_url: "",
+  thumbnail_url: "",
+  mime_type: "",
+  file_size_bytes: "",
+  notes: "",
+};
+
 export function CampaignOverviewPage() {
   const { campaignId } = useParams();
   const token = useAuthStore((state) => state.token);
   const [briefForm, setBriefForm] = useState<BriefFormState>(emptyBriefForm);
   const [draftForm, setDraftForm] = useState<DraftFormState>(emptyDraftForm);
+  const [assetForm, setAssetForm] = useState<AssetFormState>(emptyAssetForm);
+  const [editingAssetId, setEditingAssetId] = useState<number | null>(null);
 
   const overviewQuery = useQuery({
     queryKey: ["campaign-overview", campaignId],
@@ -120,7 +142,7 @@ export function CampaignOverviewPage() {
 
   const createDraftMutation = useMutation({
     mutationFn: () =>
-      apiRequest("/drafts", {
+      apiRequest(`/drafts`, {
         method: "POST",
         body: JSON.stringify({
           campaign_id: Number(campaignId),
@@ -141,7 +163,40 @@ export function CampaignOverviewPage() {
     },
   });
 
-  const draftTotal = useMemo(() => overview?.drafts.length ?? 0, [overview?.drafts.length]);
+  const saveAssetMutation = useMutation({
+    mutationFn: () =>
+      apiRequest(`/campaigns/${campaignId}/assets${editingAssetId ? `/${editingAssetId}` : ""}`, {
+        method: editingAssetId ? "PATCH" : "POST",
+        body: JSON.stringify({
+          name: assetForm.name,
+          asset_type: assetForm.asset_type,
+          file_url: assetForm.file_url,
+          thumbnail_url: assetForm.thumbnail_url || null,
+          mime_type: assetForm.mime_type || null,
+          file_size_bytes: assetForm.file_size_bytes ? Number(assetForm.file_size_bytes) : null,
+          notes: assetForm.notes || null,
+        }),
+      }, token),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["campaign-overview", campaignId] });
+      setEditingAssetId(null);
+      setAssetForm(emptyAssetForm);
+    },
+  });
+
+  const deleteAssetMutation = useMutation({
+    mutationFn: (assetId: number) =>
+      apiRequest<void>(`/campaigns/${campaignId}/assets/${assetId}`, {
+        method: "DELETE",
+      }, token),
+    onSuccess: (_, assetId) => {
+      queryClient.invalidateQueries({ queryKey: ["campaign-overview", campaignId] });
+      if (editingAssetId === assetId) {
+        setEditingAssetId(null);
+        setAssetForm(emptyAssetForm);
+      }
+    },
+  });
 
   if (overviewQuery.isLoading) {
     return <LoadingState label="Loading campaign workspace" />;
@@ -168,10 +223,10 @@ export function CampaignOverviewPage() {
       />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard label="Drafts" value={draftTotal} />
+        <MetricCard label="Drafts" value={overview.drafts.length} />
+        <MetricCard label="Assets" value={overview.assets.length} />
+        <MetricCard label="Scheduled" value={overview.schedule.length} />
         <MetricCard label="Brief" value={overview.brief ? "Ready" : "Missing"} />
-        <MetricCard label="Objective" value={campaign.objective ?? "Not set"} />
-        <MetricCard label="Audience" value={campaign.audience ?? "Not set"} />
       </div>
 
       <div className="mt-8 grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
@@ -182,6 +237,11 @@ export function CampaignOverviewPage() {
               <h2 className="mt-2 text-2xl font-semibold tracking-tight">Campaign brief</h2>
             </div>
             {overview.brief ? <Badge tone="success">Saved</Badge> : <Badge tone="warning">Draft</Badge>}
+          </div>
+
+          <div className="mt-4 rounded-[1.25rem] border border-border bg-white/80 p-4">
+            <p className="text-sm text-muted-foreground">{campaign.objective ?? "Objective not set yet."}</p>
+            <p className="mt-2 text-sm text-muted-foreground">{campaign.audience ?? "Audience not set yet."}</p>
           </div>
 
           <form
@@ -342,6 +402,197 @@ export function CampaignOverviewPage() {
         </div>
       </div>
 
+      <div className="mt-8 grid gap-6 xl:grid-cols-[1.02fr_0.98fr]">
+        <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Asset library</p>
+              <h2 className="mt-2 text-2xl font-semibold tracking-tight">Campaign assets</h2>
+            </div>
+            <Badge tone="muted">{overview.assets.length} items</Badge>
+          </div>
+
+          <form
+            className="mt-5 space-y-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              saveAssetMutation.mutate();
+            }}
+          >
+            <div className="grid gap-4 md:grid-cols-2">
+              <Field label="Asset name">
+                <Input
+                  value={assetForm.name}
+                  onChange={(event) => setAssetForm((current) => ({ ...current, name: event.target.value }))}
+                />
+              </Field>
+              <Field label="Asset type">
+                <Input
+                  placeholder="Image, video, brief, deck"
+                  value={assetForm.asset_type}
+                  onChange={(event) => setAssetForm((current) => ({ ...current, asset_type: event.target.value }))}
+                />
+              </Field>
+            </div>
+
+            <Field label="File URL">
+              <Input
+                value={assetForm.file_url}
+                onChange={(event) => setAssetForm((current) => ({ ...current, file_url: event.target.value }))}
+              />
+            </Field>
+
+            <div className="grid gap-4 md:grid-cols-3">
+              <Field label="Thumbnail URL">
+                <Input
+                  value={assetForm.thumbnail_url}
+                  onChange={(event) => setAssetForm((current) => ({ ...current, thumbnail_url: event.target.value }))}
+                />
+              </Field>
+              <Field label="Mime type">
+                <Input
+                  placeholder="image/png"
+                  value={assetForm.mime_type}
+                  onChange={(event) => setAssetForm((current) => ({ ...current, mime_type: event.target.value }))}
+                />
+              </Field>
+              <Field label="File size (bytes)">
+                <Input
+                  inputMode="numeric"
+                  value={assetForm.file_size_bytes}
+                  onChange={(event) => setAssetForm((current) => ({ ...current, file_size_bytes: event.target.value }))}
+                />
+              </Field>
+            </div>
+
+            <Field label="Notes">
+              <Textarea
+                className="min-h-[100px]"
+                value={assetForm.notes}
+                onChange={(event) => setAssetForm((current) => ({ ...current, notes: event.target.value }))}
+              />
+            </Field>
+
+            <MutationFeedback error={saveAssetMutation.error || deleteAssetMutation.error} />
+            <div className="flex flex-wrap gap-3">
+              <Button disabled={saveAssetMutation.isPending} type="submit">
+                {saveAssetMutation.isPending ? "Saving..." : editingAssetId ? "Update asset" : "Add asset"}
+              </Button>
+              {editingAssetId ? (
+                <Button
+                  onClick={() => {
+                    setEditingAssetId(null);
+                    setAssetForm(emptyAssetForm);
+                  }}
+                  type="button"
+                  variant="ghost"
+                >
+                  Cancel edit
+                </Button>
+              ) : null}
+            </div>
+          </form>
+
+          <div className="mt-6 space-y-3">
+            {overview.assets.length ? (
+              overview.assets.map((asset) => (
+                <div key={asset.id} className="rounded-[1.25rem] border border-border bg-white/80 px-4 py-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <h3 className="text-base font-semibold">{asset.name}</h3>
+                      <Badge>{asset.asset_type}</Badge>
+                      {asset.mime_type ? <Badge tone="muted">{asset.mime_type}</Badge> : null}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        onClick={() => {
+                          setEditingAssetId(asset.id);
+                          setAssetForm(toAssetForm(asset));
+                        }}
+                        type="button"
+                        variant="secondary"
+                      >
+                        Edit
+                      </Button>
+                      <Button
+                        disabled={deleteAssetMutation.isPending}
+                        onClick={() => {
+                          if (window.confirm(`Delete ${asset.name}?`)) {
+                            deleteAssetMutation.mutate(asset.id);
+                          }
+                        }}
+                        type="button"
+                        variant="danger"
+                      >
+                        Delete
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+                    <a className="font-medium text-primary" href={asset.file_url} rel="noreferrer" target="_blank">
+                      Open asset
+                    </a>
+                    {asset.thumbnail_url ? (
+                      <a className="font-medium text-primary" href={asset.thumbnail_url} rel="noreferrer" target="_blank">
+                        Preview
+                      </a>
+                    ) : null}
+                    {asset.file_size_bytes ? <span>{formatFileSize(asset.file_size_bytes)}</span> : null}
+                  </div>
+                  {asset.notes ? <p className="mt-3 text-sm leading-6 text-foreground">{asset.notes}</p> : null}
+                  <p className="mt-3 text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                    {asset.creator_name ?? "Unknown user"} · Updated {formatDateTime(asset.updated_at)}
+                  </p>
+                </div>
+              ))
+            ) : (
+              <p className="rounded-[1.25rem] border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
+                Add campaign links, working files, or reference assets to build a reusable library here.
+              </p>
+            )}
+          </div>
+        </Card>
+
+        <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Version feed</p>
+              <h2 className="mt-2 text-2xl font-semibold tracking-tight">Recent draft snapshots</h2>
+            </div>
+            <Badge tone="muted">{overview.recent_versions.length} saved</Badge>
+          </div>
+
+          <div className="mt-5 space-y-3">
+            {overview.recent_versions.length ? (
+              overview.recent_versions.map((version) => (
+                <Link
+                  key={version.id}
+                  className="block rounded-[1.25rem] border border-border bg-white/80 px-4 py-4 transition hover:bg-white"
+                  to={`/drafts/${version.draft_id}`}
+                >
+                  <div className="flex flex-wrap items-center gap-3">
+                    <h3 className="text-base font-semibold">{version.draft_title}</h3>
+                    <Badge tone="muted">v{version.version_number}</Badge>
+                    <Badge>{version.platform}</Badge>
+                    <Badge tone={version.status === "approved" || version.status === "published" ? "success" : version.status === "rejected" || version.status === "in_review" ? "warning" : "muted"}>
+                      {formatStatusLabel(version.status)}
+                    </Badge>
+                  </div>
+                  <p className="mt-2 text-sm text-muted-foreground">{version.change_summary ?? version.content_type}</p>
+                  <p className="mt-3 text-sm text-muted-foreground">
+                    {version.creator_name ?? "Unknown user"} · {formatDateTime(version.created_at)}
+                  </p>
+                </Link>
+              ))
+            ) : (
+              <p className="rounded-[1.25rem] border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
+                Version history will appear here once draft edits begin creating snapshots.
+              </p>
+            )}
+          </div>
+        </Card>
+      </div>
+
       <div className="mt-8 grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
         <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
           <div className="flex items-center justify-between gap-4">
@@ -387,40 +638,81 @@ export function CampaignOverviewPage() {
           </div>
         </Card>
 
-        <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Campaign activity</p>
-              <h2 className="mt-2 text-2xl font-semibold tracking-tight">Timeline</h2>
+        <div className="space-y-6">
+          <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Schedule</p>
+                <h2 className="mt-2 text-2xl font-semibold tracking-tight">Upcoming items</h2>
+              </div>
+              <Link className="text-sm font-medium text-primary" to="/calendar">
+                Open calendar
+              </Link>
             </div>
-            <Badge tone="muted">{overview.activity_timeline.length} events</Badge>
-          </div>
 
-          <div className="mt-5 space-y-3">
-            {overview.activity_timeline.length ? (
-              overview.activity_timeline.map((item) => (
-                <div key={item.id} className="rounded-[1.25rem] border border-border bg-white/80 px-4 py-4">
-                  <div className="flex flex-wrap items-center gap-3">
-                    <Badge>{item.entity_type}</Badge>
-                    <p className="text-sm font-medium text-foreground">{formatActionLabel(item.action)}</p>
-                  </div>
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    {item.actor_name ?? "Unknown user"} · {formatDateTime(item.created_at)}
-                  </p>
-                  {"version_number" in item.metadata ? (
-                    <p className="mt-3 text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                      Version {String(item.metadata.version_number)}
+            <div className="mt-5 space-y-3">
+              {overview.schedule.length ? (
+                overview.schedule.slice(0, 6).map((item) => (
+                  <Link
+                    key={item.id}
+                    className="block rounded-[1.25rem] border border-border bg-white/80 px-4 py-4 transition hover:bg-white"
+                    to={item.draft_id ? `/drafts/${item.draft_id}` : `/campaigns/${item.campaign_id}`}
+                  >
+                    <div className="flex flex-wrap items-center gap-3">
+                      <h3 className="text-base font-semibold">{item.title}</h3>
+                      <Badge tone={item.draft_id ? "success" : "muted"}>{item.item_type}</Badge>
+                      {item.platform ? <Badge tone="muted">{item.platform}</Badge> : null}
+                    </div>
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      {formatDateTime(item.scheduled_for)}
+                      {item.draft_title ? ` · ${item.draft_title}` : ""}
                     </p>
-                  ) : null}
-                </div>
-              ))
-            ) : (
-              <p className="rounded-[1.25rem] border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
-                Campaign activity will appear here once drafts begin moving through review.
-              </p>
-            )}
-          </div>
-        </Card>
+                    {item.notes ? <p className="mt-3 text-sm text-muted-foreground">{item.notes}</p> : null}
+                  </Link>
+                ))
+              ) : (
+                <p className="rounded-[1.25rem] border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
+                  Draft publish dates and campaign milestones will appear here once they are scheduled.
+                </p>
+              )}
+            </div>
+          </Card>
+
+          <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Campaign activity</p>
+                <h2 className="mt-2 text-2xl font-semibold tracking-tight">Timeline</h2>
+              </div>
+              <Badge tone="muted">{overview.activity_timeline.length} events</Badge>
+            </div>
+
+            <div className="mt-5 space-y-3">
+              {overview.activity_timeline.length ? (
+                overview.activity_timeline.map((item) => (
+                  <div key={item.id} className="rounded-[1.25rem] border border-border bg-white/80 px-4 py-4">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <Badge>{item.entity_type}</Badge>
+                      <p className="text-sm font-medium text-foreground">{formatActionLabel(item.action)}</p>
+                    </div>
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      {item.actor_name ?? "Unknown user"} · {formatDateTime(item.created_at)}
+                    </p>
+                    {"version_number" in item.metadata ? (
+                      <p className="mt-3 text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                        Version {String(item.metadata.version_number)}
+                      </p>
+                    ) : null}
+                  </div>
+                ))
+              ) : (
+                <p className="rounded-[1.25rem] border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
+                  Campaign activity will appear here once drafts begin moving through review.
+                </p>
+              )}
+            </div>
+          </Card>
+        </div>
       </div>
     </div>
   );
@@ -469,4 +761,26 @@ function splitList(value: string) {
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function toAssetForm(asset: CampaignAsset): AssetFormState {
+  return {
+    name: asset.name,
+    asset_type: asset.asset_type,
+    file_url: asset.file_url,
+    thumbnail_url: asset.thumbnail_url ?? "",
+    mime_type: asset.mime_type ?? "",
+    file_size_bytes: asset.file_size_bytes ? String(asset.file_size_bytes) : "",
+    notes: asset.notes ?? "",
+  };
+}
+
+function formatFileSize(value: number) {
+  if (value < 1024) {
+    return `${value} B`;
+  }
+  if (value < 1024 * 1024) {
+    return `${(value / 1024).toFixed(1)} KB`;
+  }
+  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
 }

@@ -17,3 +17,6 @@ class User(TimestampMixin, Base):
 
     drafts: Mapped[list["ContentDraft"]] = relationship(back_populates="creator", lazy="selectin")
     draft_reviews: Mapped[list["DraftReview"]] = relationship(back_populates="actor", lazy="selectin")
+    campaign_assets: Mapped[list["CampaignAsset"]] = relationship(lazy="selectin")
+    draft_versions: Mapped[list["DraftVersion"]] = relationship(lazy="selectin")
+    calendar_items: Mapped[list["CalendarItem"]] = relationship(lazy="selectin")

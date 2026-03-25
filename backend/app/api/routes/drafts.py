@@ -6,13 +6,14 @@ from app.core.enums import DraftStatus
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.content_draft import ContentDraftCreate, ContentDraftRead, ContentDraftUpdate
+from app.schemas.draft_version import DraftVersionRead
 from app.schemas.draft_review import (
     DraftReviewCreate,
     DraftReviewDecision,
     DraftReviewRead,
     DraftReviewThreadRead,
 )
-from app.services.drafts import create_draft, delete_draft, get_draft, list_drafts, update_draft
+from app.services.drafts import create_draft, delete_draft, get_draft, list_draft_versions, list_drafts, update_draft
 from app.services.reviews import (
     add_review_comment,
     approve_draft,
@@ -86,6 +87,18 @@ def read_draft_reviews(
 ) -> DraftReviewThreadRead:
     try:
         return get_draft_review_thread(db, draft_id=draft_id, user=current_user)
+    except Exception as exc:
+        _raise_service_error(exc)
+
+
+@router.get("/{draft_id}/versions", response_model=list[DraftVersionRead])
+def read_draft_versions(
+    draft_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[DraftVersionRead]:
+    try:
+        return list_draft_versions(db, draft_id=draft_id, user=current_user)
     except Exception as exc:
         _raise_service_error(exc)
 

@@ -37,3 +37,9 @@ class Brand(TimestampMixin, Base):
         cascade="all, delete-orphan",
         lazy="selectin",
     )
+    calendar_items: Mapped[list["CalendarItem"]] = relationship(
+        back_populates="brand",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+        order_by="CalendarItem.scheduled_for.asc()",
+    )

@@ -7,7 +7,14 @@ from app.models.user import User
 from app.schemas.content_draft import ContentDraftRead
 from app.schemas.draft_review import DraftReviewCreate, DraftReviewDecision, DraftReviewRead, DraftReviewThreadRead
 from app.services.audit import record_audit_log
-from app.services.drafts import _coerce_status, _get_draft_with_role, _serialize_draft, list_drafts
+from app.services.drafts import (
+    _coerce_status,
+    _create_version_snapshot,
+    _get_draft_with_role,
+    _serialize_draft,
+    _sync_draft_calendar_item,
+    list_drafts,
+)
 
 
 def _serialize_review(review: DraftReview) -> DraftReviewRead:
@@ -159,6 +166,7 @@ def submit_draft_for_review(
         action="draft.submitted_for_review",
         metadata={"campaign_id": draft.campaign_id, "draft_id": draft.id, "from": previous_status.value, "to": "in_review"},
     )
+    _sync_draft_calendar_item(db, draft=draft, actor_user_id=user.id)
     db.commit()
     db.refresh(draft)
     return _serialize_draft(draft)
@@ -201,6 +209,7 @@ def approve_draft(
         action="draft.review_approved",
         metadata={"campaign_id": draft.campaign_id, "draft_id": draft.id, "from": previous_status.value, "to": "approved"},
     )
+    _sync_draft_calendar_item(db, draft=draft, actor_user_id=user.id)
     db.commit()
     db.refresh(draft)
     return _serialize_draft(draft)
@@ -245,6 +254,7 @@ def reject_draft(
         action="draft.review_rejected",
         metadata={"campaign_id": draft.campaign_id, "draft_id": draft.id, "from": previous_status.value, "to": "rejected"},
     )
+    _sync_draft_calendar_item(db, draft=draft, actor_user_id=user.id)
     db.commit()
     db.refresh(draft)
     return _serialize_draft(draft)
@@ -270,6 +280,12 @@ def resubmit_draft(
 
     draft.current_version_number += 1
     draft.status = DraftStatus.IN_REVIEW
+    _create_version_snapshot(
+        db,
+        draft=draft,
+        actor_user_id=user.id,
+        change_summary="Resubmitted after review feedback",
+    )
     review = _create_review_entry(
         db,
         draft=draft,
@@ -294,6 +310,7 @@ def resubmit_draft(
             "version_number": draft.current_version_number,
         },
     )
+    _sync_draft_calendar_item(db, draft=draft, actor_user_id=user.id)
     db.commit()
     db.refresh(draft)
     return _serialize_draft(draft)

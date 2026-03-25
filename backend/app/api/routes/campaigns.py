@@ -5,7 +5,14 @@ from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.campaign import CampaignCreate, CampaignRead, CampaignUpdate
+from app.schemas.campaign_asset import CampaignAssetCreate, CampaignAssetRead, CampaignAssetUpdate
 from app.schemas.campaign_workspace import CampaignOverviewRead
+from app.services.assets import (
+    create_campaign_asset,
+    delete_campaign_asset,
+    list_campaign_assets,
+    update_campaign_asset,
+)
 from app.services.campaigns import (
     create_campaign,
     delete_campaign,
@@ -60,6 +67,59 @@ def read_campaign_overview(
         return get_campaign_overview(db, campaign_id=campaign_id, user=current_user)
     except Exception as exc:
         _raise_service_error(exc)
+
+
+@router.get("/{campaign_id}/assets", response_model=list[CampaignAssetRead])
+def read_campaign_assets(
+    campaign_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[CampaignAssetRead]:
+    try:
+        return list_campaign_assets(db, campaign_id=campaign_id, user=current_user)
+    except Exception as exc:
+        _raise_service_error(exc)
+
+
+@router.post("/{campaign_id}/assets", response_model=CampaignAssetRead, status_code=status.HTTP_201_CREATED)
+def create_campaign_asset_route(
+    campaign_id: int,
+    payload: CampaignAssetCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> CampaignAssetRead:
+    try:
+        return create_campaign_asset(db, campaign_id=campaign_id, payload=payload, user=current_user)
+    except Exception as exc:
+        _raise_service_error(exc)
+
+
+@router.patch("/{campaign_id}/assets/{asset_id}", response_model=CampaignAssetRead)
+def update_campaign_asset_route(
+    campaign_id: int,
+    asset_id: int,
+    payload: CampaignAssetUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> CampaignAssetRead:
+    try:
+        return update_campaign_asset(db, campaign_id=campaign_id, asset_id=asset_id, payload=payload, user=current_user)
+    except Exception as exc:
+        _raise_service_error(exc)
+
+
+@router.delete("/{campaign_id}/assets/{asset_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_campaign_asset_route(
+    campaign_id: int,
+    asset_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Response:
+    try:
+        delete_campaign_asset(db, campaign_id=campaign_id, asset_id=asset_id, user=current_user)
+    except Exception as exc:
+        _raise_service_error(exc)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/{campaign_id}", response_model=CampaignRead)
