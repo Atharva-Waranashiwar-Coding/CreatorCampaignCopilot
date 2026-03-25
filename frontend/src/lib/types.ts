@@ -2,6 +2,14 @@ export type BrandRole = "owner" | "admin" | "editor" | "reviewer" | "viewer";
 export type MembershipStatus = "invited" | "active" | "suspended";
 export type ProjectStatus = "active" | "archived";
 export type CampaignStatus = "planning" | "active" | "completed" | "archived";
+export type DraftStatus =
+  | "idea"
+  | "draft"
+  | "in_review"
+  | "approved"
+  | "scheduled"
+  | "published"
+  | "rejected";
 
 export type User = {
   id: number;
@@ -80,6 +88,54 @@ export type Campaign = {
   created_by: number;
   created_at: string;
   updated_at: string;
+  brief_id: number | null;
+  draft_count: number;
+};
+
+export type ContentBrief = {
+  id: number;
+  campaign_id: number;
+  key_message: string | null;
+  call_to_action: string | null;
+  tone: string | null;
+  channels: string[];
+  themes: string[];
+  references: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ContentDraft = {
+  id: number;
+  campaign_id: number;
+  campaign_name: string;
+  project_id: number;
+  project_name: string;
+  brand_id: number;
+  brand_name: string;
+  title: string;
+  platform: string;
+  content_type: string;
+  content_body: string | null;
+  status: DraftStatus;
+  planned_publish_at: string | null;
+  current_version_number: number;
+  created_by: number;
+  creator_name: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type DraftStatusCount = {
+  status: DraftStatus;
+  count: number;
+};
+
+export type CampaignOverview = {
+  campaign: Campaign;
+  brief: ContentBrief | null;
+  drafts: ContentDraft[];
+  status_breakdown: DraftStatusCount[];
 };
 
 export type AuditLog = {
@@ -99,5 +155,7 @@ export type DashboardSummary = {
   project_count: number;
   campaign_count: number;
   active_campaign_count: number;
+  draft_count: number;
+  in_review_draft_count: number;
   recent_activity: AuditLog[];
 };
