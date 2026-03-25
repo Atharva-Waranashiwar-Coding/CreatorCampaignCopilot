@@ -43,3 +43,15 @@ class DraftReviewAction(StrEnum):
     APPROVED = "approved"
     REJECTED = "rejected"
     RESUBMITTED = "resubmitted"
+
+
+class PlanInterval(StrEnum):
+    MONTHLY = "monthly"
+    YEARLY = "yearly"
+
+
+class SubscriptionStatus(StrEnum):
+    TRIALING = "trialing"
+    ACTIVE = "active"
+    PAST_DUE = "past_due"
+    CANCELED = "canceled"

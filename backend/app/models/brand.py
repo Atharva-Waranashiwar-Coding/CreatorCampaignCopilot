@@ -43,3 +43,15 @@ class Brand(TimestampMixin, Base):
         lazy="selectin",
         order_by="CalendarItem.scheduled_for.asc()",
     )
+    subscription: Mapped["BrandSubscription | None"] = relationship(
+        back_populates="brand",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+        uselist=False,
+    )
+    templates: Mapped[list["ContentTemplate"]] = relationship(
+        back_populates="brand",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+        order_by="ContentTemplate.updated_at.desc()",
+    )
