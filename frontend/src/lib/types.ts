@@ -325,6 +325,14 @@ export type DashboardDateBucket = {
   count: number;
 };
 
+export type DashboardHealthFactor = {
+  key: string;
+  label: string;
+  count: number;
+  penalty: number;
+  detail: string;
+};
+
 export type DashboardMemberBucket = {
   user_id: number;
   name: string;
@@ -410,6 +418,36 @@ export type DashboardContentMixAnalytics = {
   by_content_type: DashboardCountBucket[];
   by_campaign_status: DashboardCountBucket[];
   by_interval: DashboardDateBucket[];
+};
+
+export type DashboardCampaignHealth = {
+  campaign_id: number;
+  campaign_name: string;
+  project_id: number;
+  project_name: string;
+  brand_id: number;
+  brand_name: string;
+  campaign_status: string;
+  score: number;
+  label: string;
+  penalty_total: number;
+  draft_count: number;
+  asset_count: number;
+  next_deadline_at: string | null;
+  factors: DashboardHealthFactor[];
+};
+
+export type DashboardCampaignHealthSummary = {
+  average_score: number;
+  healthy_count: number;
+  watch_count: number;
+  at_risk_count: number;
+  critical_count: number;
+};
+
+export type DashboardCampaignHealthReport = {
+  summary: DashboardCampaignHealthSummary;
+  campaigns: DashboardCampaignHealth[];
 };
 
 export type DashboardAnalytics = {

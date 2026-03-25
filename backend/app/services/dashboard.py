@@ -10,6 +10,7 @@ from app.models.assignment import Assignment
 from app.models.brand_membership import BrandMembership
 from app.models.calendar_item import CalendarItem
 from app.models.campaign import Campaign
+from app.models.campaign_asset import CampaignAsset
 from app.models.content_draft import ContentDraft
 from app.models.content_template import ContentTemplate
 from app.models.draft_review import DraftReview
@@ -23,6 +24,9 @@ from app.schemas.dashboard import (
     DashboardDateBucket,
     DashboardDraftAnalytics,
     DashboardApprovalAnalytics,
+    DashboardCampaignHealth,
+    DashboardCampaignHealthReport,
+    DashboardCampaignHealthSummary,
     DashboardContentMixAnalytics,
     DashboardMemberBucket,
     DashboardReviewAnalytics,
@@ -31,7 +35,23 @@ from app.schemas.dashboard import (
     DashboardStatusBottleneck,
     DashboardSummary,
     DashboardWorkloadAnalytics,
+    DashboardHealthFactor,
 )
+
+HEALTH_MAX_SCORE = 100
+HEALTH_LABELS = (
+    ("healthy", 85),
+    ("watch", 70),
+    ("at_risk", 50),
+    ("critical", 0),
+)
+HEALTH_FACTOR_RULES = {
+    "overdue_drafts": {"label": "Overdue drafts", "penalty_per_item": 18, "penalty_cap": 36},
+    "pending_approvals": {"label": "Pending approvals", "penalty_per_item": 8, "penalty_cap": 24},
+    "missing_assets": {"label": "Missing assets", "penalty_per_item": 12, "penalty_cap": 12},
+    "unassigned_work": {"label": "Unassigned work", "penalty_per_item": 6, "penalty_cap": 18},
+    "upcoming_deadlines": {"label": "Upcoming deadline pressure", "penalty_per_item": 5, "penalty_cap": 15},
+}
 
 
 def _resolve_brand_scope(db: Session, *, user_id: int, brand_id: int | None = None) -> list[int]:
@@ -111,6 +131,116 @@ def _empty_dashboard_analytics(*, interval: str) -> DashboardAnalytics:
 
 def _round_metric(value: float) -> float:
     return round(value, 2)
+
+
+def _campaign_health_label(score: int) -> str:
+    for label, threshold in HEALTH_LABELS:
+        if score >= threshold:
+            return label
+    return "critical"
+
+
+def _health_factor(*, key: str, count: int, detail: str) -> DashboardHealthFactor | None:
+    if count <= 0:
+        return None
+
+    rule = HEALTH_FACTOR_RULES[key]
+    penalty = min(count * rule["penalty_per_item"], rule["penalty_cap"])
+    return DashboardHealthFactor(
+        key=key,
+        label=str(rule["label"]),
+        count=count,
+        penalty=penalty,
+        detail=detail,
+    )
+
+
+def _build_campaign_health(campaign: Campaign, *, now: datetime) -> DashboardCampaignHealth:
+    upcoming_deadline_cutoff = now + timedelta(days=7)
+    drafts = campaign.drafts
+    asset_count = len(campaign.assets)
+    open_assignments_by_draft_id = {
+        draft.id: any(
+            assignment.status == AssignmentStatus.OPEN
+            and assignment.assignment_type in {AssignmentEntityType.DRAFT, AssignmentEntityType.REVIEW_TASK}
+            for assignment in draft.assignments
+        )
+        for draft in drafts
+    }
+
+    overdue_draft_count = sum(
+        1
+        for draft in drafts
+        if draft.planned_publish_at is not None
+        and draft.planned_publish_at < now
+        and draft.status != DraftStatus.PUBLISHED
+    )
+    pending_approval_count = sum(1 for draft in drafts if draft.status == DraftStatus.IN_REVIEW)
+    missing_assets_count = 1 if drafts and asset_count == 0 else 0
+    unassigned_work_count = sum(
+        1
+        for draft in drafts
+        if draft.status != DraftStatus.PUBLISHED and not open_assignments_by_draft_id.get(draft.id, False)
+    )
+    upcoming_deadline_count = sum(
+        1
+        for draft in drafts
+        if draft.planned_publish_at is not None
+        and now <= draft.planned_publish_at <= upcoming_deadline_cutoff
+        and draft.status not in {DraftStatus.APPROVED, DraftStatus.SCHEDULED, DraftStatus.PUBLISHED}
+    )
+
+    factors = [
+        _health_factor(
+            key="overdue_drafts",
+            count=overdue_draft_count,
+            detail="Drafts have planned publish dates in the past and still are not published.",
+        ),
+        _health_factor(
+            key="pending_approvals",
+            count=pending_approval_count,
+            detail="Drafts are waiting on reviewer approval.",
+        ),
+        _health_factor(
+            key="missing_assets",
+            count=missing_assets_count,
+            detail="The campaign has drafts in motion but no linked assets.",
+        ),
+        _health_factor(
+            key="unassigned_work",
+            count=unassigned_work_count,
+            detail="Drafts are still active without an open draft or review-task assignment.",
+        ),
+        _health_factor(
+            key="upcoming_deadlines",
+            count=upcoming_deadline_count,
+            detail="Drafts are approaching a publish date within 7 days and are not yet in a ready state.",
+        ),
+    ]
+    health_factors = [factor for factor in factors if factor is not None]
+    penalty_total = sum(factor.penalty for factor in health_factors)
+    score = max(0, HEALTH_MAX_SCORE - penalty_total)
+    next_deadline_at = min(
+        (draft.planned_publish_at for draft in drafts if draft.planned_publish_at is not None),
+        default=None,
+    )
+
+    return DashboardCampaignHealth(
+        campaign_id=campaign.id,
+        campaign_name=campaign.name,
+        project_id=campaign.project_id,
+        project_name=campaign.project.name,
+        brand_id=campaign.project.brand_id,
+        brand_name=campaign.project.brand.name,
+        campaign_status=campaign.status.value if isinstance(campaign.status, CampaignStatus) else str(campaign.status),
+        score=score,
+        label=_campaign_health_label(score),
+        penalty_total=penalty_total,
+        draft_count=len(drafts),
+        asset_count=asset_count,
+        next_deadline_at=next_deadline_at,
+        factors=health_factors,
+    )
 
 
 def get_dashboard_summary(db: Session, *, user: User, brand_id: int | None = None) -> DashboardSummary:
@@ -576,3 +706,83 @@ def get_dashboard_analytics(
             ],
         ),
     )
+
+
+def get_campaign_health_report(
+    db: Session,
+    *,
+    user: User,
+    brand_id: int | None = None,
+) -> DashboardCampaignHealthReport:
+    brand_ids = _resolve_brand_scope(db, user_id=user.id, brand_id=brand_id)
+    if not brand_ids:
+        return DashboardCampaignHealthReport(
+            summary=DashboardCampaignHealthSummary(
+                average_score=0,
+                healthy_count=0,
+                watch_count=0,
+                at_risk_count=0,
+                critical_count=0,
+            ),
+            campaigns=[],
+        )
+
+    campaigns = db.scalars(
+        select(Campaign)
+        .join(Project, Project.id == Campaign.project_id)
+        .options(
+            joinedload(Campaign.project).joinedload(Project.brand),
+            joinedload(Campaign.assets),
+            joinedload(Campaign.drafts).joinedload(ContentDraft.assignments),
+        )
+        .where(Project.brand_id.in_(brand_ids))
+        .order_by(Campaign.updated_at.desc())
+    ).unique().all()
+
+    now = datetime.now(UTC)
+    campaign_health = sorted(
+        (_build_campaign_health(campaign, now=now) for campaign in campaigns),
+        key=lambda item: (item.score, item.next_deadline_at or datetime.max.replace(tzinfo=UTC), item.campaign_name.lower()),
+    )
+
+    label_counts = Counter(item.label for item in campaign_health)
+    average_score = _round_metric(sum(item.score for item in campaign_health) / len(campaign_health)) if campaign_health else 0
+
+    return DashboardCampaignHealthReport(
+        summary=DashboardCampaignHealthSummary(
+            average_score=average_score,
+            healthy_count=label_counts.get("healthy", 0),
+            watch_count=label_counts.get("watch", 0),
+            at_risk_count=label_counts.get("at_risk", 0),
+            critical_count=label_counts.get("critical", 0),
+        ),
+        campaigns=campaign_health,
+    )
+
+
+def get_campaign_health_detail(
+    db: Session,
+    *,
+    campaign_id: int,
+    user: User,
+) -> DashboardCampaignHealth:
+    row = db.scalars(
+        select(Campaign)
+        .join(Project, Project.id == Campaign.project_id)
+        .join(BrandMembership, BrandMembership.brand_id == Project.brand_id)
+        .options(
+            joinedload(Campaign.project).joinedload(Project.brand),
+            joinedload(Campaign.assets),
+            joinedload(Campaign.drafts).joinedload(ContentDraft.assignments),
+        )
+        .where(
+            Campaign.id == campaign_id,
+            BrandMembership.user_id == user.id,
+            BrandMembership.status == MembershipStatus.ACTIVE,
+        )
+    ).unique().first()
+
+    if row is None:
+        raise PermissionError("You do not have access to this campaign.")
+
+    return _build_campaign_health(row, now=datetime.now(UTC))

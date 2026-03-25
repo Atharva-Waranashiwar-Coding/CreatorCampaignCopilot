@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 
 from pydantic import BaseModel
 
@@ -28,6 +28,14 @@ class DashboardCountBucket(BaseModel):
 class DashboardDateBucket(BaseModel):
     date: date
     count: int
+
+
+class DashboardHealthFactor(BaseModel):
+    key: str
+    label: str
+    count: int
+    penalty: int
+    detail: str
 
 
 class DashboardMemberBucket(BaseModel):
@@ -102,6 +110,36 @@ class DashboardContentMixAnalytics(BaseModel):
     by_content_type: list[DashboardCountBucket]
     by_campaign_status: list[DashboardCountBucket]
     by_interval: list[DashboardDateBucket]
+
+
+class DashboardCampaignHealth(BaseModel):
+    campaign_id: int
+    campaign_name: str
+    project_id: int
+    project_name: str
+    brand_id: int
+    brand_name: str
+    campaign_status: str
+    score: int
+    label: str
+    penalty_total: int
+    draft_count: int
+    asset_count: int
+    next_deadline_at: datetime | None
+    factors: list[DashboardHealthFactor]
+
+
+class DashboardCampaignHealthSummary(BaseModel):
+    average_score: float
+    healthy_count: int
+    watch_count: int
+    at_risk_count: int
+    critical_count: int
+
+
+class DashboardCampaignHealthReport(BaseModel):
+    summary: DashboardCampaignHealthSummary
+    campaigns: list[DashboardCampaignHealth]
 
 
 class DashboardAnalytics(BaseModel):

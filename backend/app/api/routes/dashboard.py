@@ -5,8 +5,13 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.models.user import User
-from app.schemas.dashboard import DashboardAnalytics, DashboardSummary
-from app.services.dashboard import get_dashboard_analytics, get_dashboard_summary
+from app.schemas.dashboard import DashboardAnalytics, DashboardCampaignHealth, DashboardCampaignHealthReport, DashboardSummary
+from app.services.dashboard import (
+    get_campaign_health_detail,
+    get_campaign_health_report,
+    get_dashboard_analytics,
+    get_dashboard_summary,
+)
 
 router = APIRouter()
 
@@ -40,5 +45,29 @@ def read_dashboard_analytics(
 ) -> DashboardAnalytics:
     try:
         return get_dashboard_analytics(db, user=current_user, brand_id=brand_id, interval=interval)
+    except Exception as exc:
+        _raise_service_error(exc)
+
+
+@router.get("/campaign-health", response_model=DashboardCampaignHealthReport)
+def read_campaign_health_report(
+    brand_id: int | None = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> DashboardCampaignHealthReport:
+    try:
+        return get_campaign_health_report(db, user=current_user, brand_id=brand_id)
+    except Exception as exc:
+        _raise_service_error(exc)
+
+
+@router.get("/campaign-health/{campaign_id}", response_model=DashboardCampaignHealth)
+def read_campaign_health_detail(
+    campaign_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> DashboardCampaignHealth:
+    try:
+        return get_campaign_health_detail(db, campaign_id=campaign_id, user=current_user)
     except Exception as exc:
         _raise_service_error(exc)
