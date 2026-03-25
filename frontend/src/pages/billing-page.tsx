@@ -278,6 +278,16 @@ function UsageMeterCard({ metric }: { metric: UsageMetric }) {
           {metric.limit === null ? "Unlimited" : `${metric.current}/${metric.limit}`}
         </Badge>
       </div>
+      <div className="mt-3 flex items-center justify-between gap-3 text-xs uppercase tracking-[0.18em] text-muted-foreground">
+        <span>{metric.limit === null ? "No hard cap" : `${metric.percent_used ?? 0}% used`}</span>
+        <span>
+          {metric.status === "at_limit"
+            ? "Plan limit reached"
+            : metric.status === "warning"
+              ? "Nearing limit"
+              : "Healthy"}
+        </span>
+      </div>
       <div className="mt-4 h-2 rounded-full bg-slate-200/80">
         <div
           className={`h-full rounded-full ${barTone}`}
