@@ -17,6 +17,10 @@ from app.schemas.content_draft import ContentDraftRead, DraftStatusCount
 from app.services.audit import record_audit_log
 
 
+def _coerce_draft_status(value: DraftStatus | str) -> DraftStatus:
+    return value if isinstance(value, DraftStatus) else DraftStatus(value)
+
+
 def _serialize_campaign(campaign: Campaign) -> CampaignRead:
     return CampaignRead(
         id=campaign.id,
@@ -115,6 +119,7 @@ def _serialize_brief_for_campaign(campaign: Campaign) -> ContentBriefRead | None
 
 
 def _serialize_draft_for_campaign(draft: ContentDraft) -> ContentDraftRead:
+    status = _coerce_draft_status(draft.status)
     return ContentDraftRead(
         id=draft.id,
         campaign_id=draft.campaign_id,
@@ -127,7 +132,7 @@ def _serialize_draft_for_campaign(draft: ContentDraft) -> ContentDraftRead:
         platform=draft.platform,
         content_type=draft.content_type,
         content_body=draft.content_body,
-        status=draft.status,
+        status=status,
         planned_publish_at=draft.planned_publish_at,
         current_version_number=draft.current_version_number,
         created_by=draft.created_by,
@@ -140,7 +145,7 @@ def _serialize_draft_for_campaign(draft: ContentDraft) -> ContentDraftRead:
 def get_campaign_overview(db: Session, *, campaign_id: int, user: User) -> CampaignOverviewRead:
     campaign, _ = _get_campaign_with_role(db, campaign_id=campaign_id, user_id=user.id)
     ordered_drafts = sorted(campaign.drafts, key=lambda draft: draft.created_at, reverse=True)
-    status_counts = Counter(draft.status for draft in ordered_drafts)
+    status_counts = Counter(_coerce_draft_status(draft.status) for draft in ordered_drafts)
 
     return CampaignOverviewRead(
         campaign=_serialize_campaign(campaign),

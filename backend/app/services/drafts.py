@@ -12,7 +12,12 @@ from app.schemas.content_draft import ContentDraftCreate, ContentDraftRead, Cont
 from app.services.audit import record_audit_log
 
 
+def _coerce_status(value: DraftStatus | str) -> DraftStatus:
+    return value if isinstance(value, DraftStatus) else DraftStatus(value)
+
+
 def _serialize_draft(draft: ContentDraft) -> ContentDraftRead:
+    status = _coerce_status(draft.status)
     return ContentDraftRead(
         id=draft.id,
         campaign_id=draft.campaign_id,
@@ -25,7 +30,7 @@ def _serialize_draft(draft: ContentDraft) -> ContentDraftRead:
         platform=draft.platform,
         content_type=draft.content_type,
         content_body=draft.content_body,
-        status=draft.status,
+        status=status,
         planned_publish_at=draft.planned_publish_at,
         current_version_number=draft.current_version_number,
         created_by=draft.created_by,
@@ -134,7 +139,7 @@ def create_draft(db: Session, *, payload: ContentDraftCreate, user: User) -> Con
         platform=payload.platform.strip(),
         content_type=payload.content_type.strip(),
         content_body=payload.content_body,
-        status=payload.status,
+        status=_coerce_status(payload.status),
         planned_publish_at=payload.planned_publish_at,
         created_by=user.id,
     )
@@ -148,7 +153,7 @@ def create_draft(db: Session, *, payload: ContentDraftCreate, user: User) -> Con
         entity_type="content_draft",
         entity_id=draft.id,
         action="draft.created",
-        metadata={"campaign_id": campaign.id, "status": draft.status.value},
+        metadata={"campaign_id": campaign.id, "status": _coerce_status(draft.status).value},
     )
     db.commit()
     db.refresh(draft)
@@ -164,11 +169,15 @@ def update_draft(db: Session, *, draft_id: int, payload: ContentDraftUpdate, use
     )
 
     data = payload.model_dump(exclude_unset=True)
-    previous_status = draft.status
+    previous_status = _coerce_status(draft.status)
     for field, value in data.items():
-        setattr(draft, field, value.strip() if isinstance(value, str) else value)
+        if field == "status" and value is not None:
+            setattr(draft, field, _coerce_status(value))
+        else:
+            setattr(draft, field, value.strip() if isinstance(value, str) else value)
 
-    if "status" in data and draft.status != previous_status:
+    current_status = _coerce_status(draft.status)
+    if "status" in data and current_status != previous_status:
         record_audit_log(
             db,
             brand_id=draft.campaign.project.brand_id,
@@ -176,7 +185,7 @@ def update_draft(db: Session, *, draft_id: int, payload: ContentDraftUpdate, use
             entity_type="content_draft",
             entity_id=draft.id,
             action="draft.status_changed",
-            metadata={"from": previous_status.value, "to": draft.status.value},
+            metadata={"from": previous_status.value, "to": current_status.value},
         )
 
     db.commit()
