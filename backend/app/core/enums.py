@@ -37,6 +37,16 @@ class DraftStatus(StrEnum):
     REJECTED = "rejected"
 
 
+class DraftStageType(StrEnum):
+    BACKLOG = "backlog"
+    IN_PROGRESS = "in_progress"
+    REVIEW = "review"
+    APPROVED = "approved"
+    SCHEDULED = "scheduled"
+    PUBLISHED = "published"
+    CHANGES_REQUESTED = "changes_requested"
+
+
 class DraftReviewAction(StrEnum):
     COMMENTED = "commented"
     SUBMITTED = "submitted"

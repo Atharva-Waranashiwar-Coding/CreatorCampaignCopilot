@@ -5,7 +5,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from app.core.enums import BrandRole, DraftReviewAction, DraftStatus
+from app.core.enums import BrandRole, DraftReviewAction
 
 
 class FetchBrandGuidelinesRequest(BaseModel):
@@ -143,7 +143,8 @@ class SummarizeReviewFeedbackResponse(BaseModel):
     draft_title: str
     brand_id: int
     brand_name: str
-    current_status: DraftStatus
+    current_status: str
+    current_status_label: str
     current_user_role: BrandRole
     review_count: int
     latest_action: DraftReviewAction | None = None

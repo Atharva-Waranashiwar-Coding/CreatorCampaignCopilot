@@ -2,7 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict
 
-from app.core.enums import DraftStatus
+from app.core.enums import DraftStageType
 
 
 class DraftVersionRead(BaseModel):
@@ -22,7 +22,10 @@ class DraftVersionRead(BaseModel):
     platform: str
     content_type: str
     content_body: str | None
-    status: DraftStatus
+    status: str
+    status_label: str
+    status_type: DraftStageType
+    status_color: str
     planned_publish_at: datetime | None
     change_summary: str | None
     created_by: int

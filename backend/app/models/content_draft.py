@@ -2,10 +2,9 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum as SAEnum, ForeignKey, Integer, String, Text
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.core.enums import DraftStatus
 from app.db.base_class import Base
 from app.models.mixins import TimestampMixin
 
@@ -23,12 +22,7 @@ class ContentDraft(TimestampMixin, Base):
     platform: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
     content_type: Mapped[str] = mapped_column(String(120), nullable=False)
     content_body: Mapped[str | None] = mapped_column(Text)
-    status: Mapped[DraftStatus] = mapped_column(
-        SAEnum(DraftStatus, name="draft_status", native_enum=False),
-        nullable=False,
-        default=DraftStatus.DRAFT,
-        index=True,
-    )
+    status: Mapped[str] = mapped_column(String(120), nullable=False, default="draft", index=True)
     planned_publish_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     current_version_number: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)

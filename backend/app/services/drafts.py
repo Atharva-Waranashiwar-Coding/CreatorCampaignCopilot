@@ -3,7 +3,7 @@ from collections.abc import Iterable
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
-from app.core.enums import DraftStatus, MembershipStatus
+from app.core.enums import DraftStageType, MembershipStatus
 from app.core.permissions import WORKSPACE_MANAGEMENT_ROLES, require_role
 from app.models.brand_membership import BrandMembership
 from app.models.calendar_item import CalendarItem
@@ -18,14 +18,12 @@ from app.schemas.content_draft import ContentDraftCreate, ContentDraftRead, Cont
 from app.schemas.draft_version import DraftVersionRead
 from app.services.access import assert_brand_limit_available
 from app.services.audit import record_audit_log
+from app.services.draft_workflows import (
+    get_brand_draft_workflow,
+    get_workflow_stage_or_raise,
+    is_workflow_transition_allowed,
+)
 
-EDITORIAL_CREATE_STATUSES = {DraftStatus.IDEA, DraftStatus.DRAFT, DraftStatus.IN_REVIEW}
-EDITORIAL_STATUS_TRANSITIONS = {
-    DraftStatus.IDEA: {DraftStatus.DRAFT},
-    DraftStatus.DRAFT: {DraftStatus.IDEA},
-    DraftStatus.APPROVED: {DraftStatus.SCHEDULED, DraftStatus.PUBLISHED},
-    DraftStatus.SCHEDULED: {DraftStatus.PUBLISHED},
-}
 VERSION_TRACKED_FIELDS = {
     "title",
     "platform",
@@ -45,12 +43,21 @@ DRAFT_FIELD_LABELS = {
 }
 
 
-def _coerce_status(value: DraftStatus | str) -> DraftStatus:
-    return value if isinstance(value, DraftStatus) else DraftStatus(value)
+def _coerce_status(value: str | None) -> str | None:
+    return str(value) if value is not None else None
+
+
+def _get_draft_workflow(draft: ContentDraft):
+    return get_brand_draft_workflow(draft.campaign.project.brand)
+
+
+def _stage_metadata(*, status_key: str, draft: ContentDraft):
+    workflow = _get_draft_workflow(draft)
+    return get_workflow_stage_or_raise(workflow, status_key)
 
 
 def _serialize_draft(draft: ContentDraft) -> ContentDraftRead:
-    status = _coerce_status(draft.status)
+    stage = _stage_metadata(status_key=draft.status, draft=draft)
     latest_review = draft.reviews[0] if draft.reviews else None
     return ContentDraftRead(
         id=draft.id,
@@ -64,7 +71,10 @@ def _serialize_draft(draft: ContentDraft) -> ContentDraftRead:
         platform=draft.platform,
         content_type=draft.content_type,
         content_body=draft.content_body,
-        status=status,
+        status=stage.key,
+        status_label=stage.label,
+        status_type=stage.stage_type,
+        status_color=stage.color,
         planned_publish_at=draft.planned_publish_at,
         current_version_number=draft.current_version_number,
         created_by=draft.created_by,
@@ -81,6 +91,7 @@ def _serialize_draft_version(version: DraftVersion) -> DraftVersionRead:
     draft = version.draft
     campaign = draft.campaign
     project = campaign.project
+    stage = _stage_metadata(status_key=version.status, draft=draft)
     return DraftVersionRead(
         id=version.id,
         draft_id=version.draft_id,
@@ -96,7 +107,10 @@ def _serialize_draft_version(version: DraftVersion) -> DraftVersionRead:
         platform=version.platform,
         content_type=version.content_type,
         content_body=version.content_body,
-        status=_coerce_status(version.status),
+        status=stage.key,
+        status_label=stage.label,
+        status_type=stage.stage_type,
+        status_color=stage.color,
         planned_publish_at=version.planned_publish_at,
         change_summary=version.change_summary,
         created_by=version.created_by,
@@ -137,7 +151,7 @@ def list_drafts(
     user: User,
     campaign_id: int | None = None,
     platform: str | None = None,
-    status: DraftStatus | None = None,
+    status: str | None = None,
     search: str | None = None,
 ) -> list[ContentDraftRead]:
     query = (
@@ -211,7 +225,7 @@ def _create_version_snapshot(
         platform=draft.platform,
         content_type=draft.content_type,
         content_body=draft.content_body,
-        status=_coerce_status(draft.status),
+        status=draft.status,
         planned_publish_at=draft.planned_publish_at,
         change_summary=change_summary,
         created_by=actor_user_id,
@@ -243,7 +257,7 @@ def _sync_draft_calendar_item(db: Session, *, draft: ContentDraft, actor_user_id
             db.delete(calendar_item)
         return
 
-    status_value = _coerce_status(draft.status).value
+    status_value = draft.status
     if calendar_item is None:
         assert_brand_limit_available(
             db,
@@ -296,8 +310,15 @@ def create_draft(db: Session, *, payload: ContentDraftCreate, user: User) -> Con
         WORKSPACE_MANAGEMENT_ROLES,
         "You do not have permission to create drafts.",
     )
-    if payload.status not in EDITORIAL_CREATE_STATUSES:
-        raise ValueError("New drafts can only start as idea, draft, or in review.")
+    workflow = get_brand_draft_workflow(campaign.project.brand)
+    requested_status = payload.status or workflow.initial_stage_keys[0]
+    initial_stage = get_workflow_stage_or_raise(
+        workflow,
+        requested_status,
+        message_prefix="Draft creation status",
+    )
+    if not initial_stage.is_initial:
+        raise ValueError("New drafts can only start in workflow stages marked as initial.")
 
     draft = ContentDraft(
         campaign_id=campaign.id,
@@ -305,7 +326,7 @@ def create_draft(db: Session, *, payload: ContentDraftCreate, user: User) -> Con
         platform=payload.platform.strip(),
         content_type=payload.content_type.strip(),
         content_body=payload.content_body,
-        status=_coerce_status(payload.status),
+        status=initial_stage.key,
         planned_publish_at=payload.planned_publish_at,
         created_by=user.id,
     )
@@ -329,7 +350,7 @@ def create_draft(db: Session, *, payload: ContentDraftCreate, user: User) -> Con
         action="draft.created",
         metadata={
             "campaign_id": campaign.id,
-            "status": _coerce_status(draft.status).value,
+            "status": draft.status,
             "version_number": draft.current_version_number,
         },
     )
@@ -338,14 +359,30 @@ def create_draft(db: Session, *, payload: ContentDraftCreate, user: User) -> Con
     return get_draft(db, draft_id=draft.id, user=user)
 
 
-def _validate_editorial_status_transition(current_status: DraftStatus, next_status: DraftStatus) -> None:
+def _validate_editorial_status_transition(*, draft: ContentDraft, next_status: str) -> None:
+    workflow = _get_draft_workflow(draft)
+    current_status = draft.status
     if current_status == next_status:
         return
 
-    if next_status in EDITORIAL_STATUS_TRANSITIONS.get(current_status, set()):
-        return
+    current_stage = get_workflow_stage_or_raise(workflow, current_status)
+    next_stage = get_workflow_stage_or_raise(workflow, next_status)
 
-    raise ValueError("Use the review workflow actions for this draft status transition.")
+    if not is_workflow_transition_allowed(workflow, current_status, next_status):
+        raise ValueError("This draft stage move is not allowed by the brand workflow.")
+
+    if next_stage.stage_type == DraftStageType.REVIEW:
+        raise ValueError("Use the submit-for-review action for this draft stage change.")
+    if current_stage.stage_type == DraftStageType.REVIEW:
+        if next_stage.stage_type == DraftStageType.APPROVED:
+            raise ValueError("Use the approve action for this draft stage change.")
+        if next_stage.stage_type == DraftStageType.CHANGES_REQUESTED:
+            raise ValueError("Use the reject action for this draft stage change so feedback is captured.")
+        raise ValueError("Use the review workflow actions for this draft stage transition.")
+    if next_stage.stage_type == DraftStageType.APPROVED:
+        raise ValueError("Use the approve action for this draft stage change.")
+    if next_stage.stage_type == DraftStageType.CHANGES_REQUESTED:
+        raise ValueError("Use the reject action for this draft stage change so feedback is captured.")
 
 
 def update_draft(db: Session, *, draft_id: int, payload: ContentDraftUpdate, user: User) -> ContentDraftRead:
@@ -357,17 +394,17 @@ def update_draft(db: Session, *, draft_id: int, payload: ContentDraftUpdate, use
     )
 
     data = payload.model_dump(exclude_unset=True)
-    previous_status = _coerce_status(draft.status)
+    previous_status = draft.status
     changed_fields: list[str] = []
     draft_changes: dict[str, str] = {}
 
-    next_status = None
+    next_status: str | None = None
     if "status" in data and data["status"] is not None:
-        next_status = _coerce_status(data.pop("status"))
-        _validate_editorial_status_transition(previous_status, next_status)
+        next_status = str(data.pop("status"))
+        _validate_editorial_status_transition(draft=draft, next_status=next_status)
         if next_status != previous_status:
             changed_fields.append("status")
-            draft_changes["status"] = next_status.value
+            draft_changes["status"] = next_status
 
     for field, value in data.items():
         normalized = value.strip() if isinstance(value, str) else value
@@ -380,7 +417,7 @@ def update_draft(db: Session, *, draft_id: int, payload: ContentDraftUpdate, use
     if next_status is not None:
         draft.status = next_status
 
-    current_status = _coerce_status(draft.status)
+    current_status = draft.status
     version_fields = [field for field in changed_fields if field in VERSION_TRACKED_FIELDS]
     if version_fields:
         draft.current_version_number += 1
@@ -401,8 +438,8 @@ def update_draft(db: Session, *, draft_id: int, payload: ContentDraftUpdate, use
             action="draft.status_changed",
             metadata={
                 "campaign_id": draft.campaign_id,
-                "from": previous_status.value,
-                "to": current_status.value,
+                "from": previous_status,
+                "to": current_status,
             },
         )
 

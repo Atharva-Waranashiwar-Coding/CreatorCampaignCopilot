@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum as SAEnum, ForeignKey, Integer, Text, func
+from sqlalchemy import DateTime, Enum as SAEnum, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.core.enums import DraftReviewAction, DraftStatus
+from app.core.enums import DraftReviewAction
 from app.db.base_class import Base
 
 
@@ -30,14 +30,8 @@ class DraftReview(Base):
     )
     comment: Mapped[str | None] = mapped_column(Text)
     version_number: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
-    from_status: Mapped[DraftStatus | None] = mapped_column(
-        SAEnum(DraftStatus, name="draft_status", native_enum=False),
-        nullable=True,
-    )
-    to_status: Mapped[DraftStatus | None] = mapped_column(
-        SAEnum(DraftStatus, name="draft_status", native_enum=False),
-        nullable=True,
-    )
+    from_status: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    to_status: Mapped[str | None] = mapped_column(String(120), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

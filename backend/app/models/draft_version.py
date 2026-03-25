@@ -2,10 +2,9 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum as SAEnum, ForeignKey, String, Text, UniqueConstraint, func
+from sqlalchemy import DateTime, ForeignKey, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.core.enums import DraftStatus
 from app.db.base_class import Base
 
 
@@ -26,10 +25,7 @@ class DraftVersion(Base):
     platform: Mapped[str] = mapped_column(String(120), nullable=False)
     content_type: Mapped[str] = mapped_column(String(120), nullable=False)
     content_body: Mapped[str | None] = mapped_column(Text)
-    status: Mapped[DraftStatus] = mapped_column(
-        SAEnum(DraftStatus, name="draft_status", native_enum=False),
-        nullable=False,
-    )
+    status: Mapped[str] = mapped_column(String(120), nullable=False)
     planned_publish_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     change_summary: Mapped[str | None] = mapped_column(Text)
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)

@@ -1,7 +1,7 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.enums import AssignmentEntityType, AssignmentStatus, DraftReviewAction, DraftStatus, MembershipStatus, NotificationType
+from app.core.enums import AssignmentEntityType, AssignmentStatus, DraftReviewAction, DraftStageType, MembershipStatus, NotificationType
 from app.core.permissions import REVIEW_WORKFLOW_ROLES, WORKSPACE_MANAGEMENT_ROLES, require_role
 from app.models.assignment import Assignment
 from app.models.brand_membership import BrandMembership
@@ -15,14 +15,25 @@ from app.services.drafts import (
     _coerce_status,
     _create_version_snapshot,
     _get_draft_with_role,
+    _get_draft_workflow,
     _serialize_draft,
     _sync_draft_calendar_item,
     list_drafts,
 )
+from app.services.draft_workflows import get_workflow_stage_by_type, get_workflow_stage_or_raise, is_workflow_transition_allowed
 from app.services.notifications import notify_users
 
 
-def _serialize_review(review: DraftReview) -> DraftReviewRead:
+def _status_label(workflow, status: str | None) -> str | None:
+    if status is None:
+        return None
+    try:
+        return get_workflow_stage_or_raise(workflow, status).label
+    except ValueError:
+        return status.replace("_", " ").replace("-", " ").title()
+
+
+def _serialize_review(review: DraftReview, workflow) -> DraftReviewRead:
     return DraftReviewRead(
         id=review.id,
         draft_id=review.draft_id,
@@ -32,35 +43,48 @@ def _serialize_review(review: DraftReview) -> DraftReviewRead:
         comment=review.comment,
         mentions=[serialize_mention(mention) for mention in review.mentions],
         version_number=review.version_number,
-        from_status=_coerce_status(review.from_status) if review.from_status is not None else None,
-        to_status=_coerce_status(review.to_status) if review.to_status is not None else None,
+        from_status=_coerce_status(review.from_status),
+        from_status_label=_status_label(workflow, _coerce_status(review.from_status)),
+        to_status=_coerce_status(review.to_status),
+        to_status_label=_status_label(workflow, _coerce_status(review.to_status)),
         created_at=review.created_at,
     )
 
 
-def _available_actions(role, status: DraftStatus) -> list[DraftReviewAction]:
+def _review_submission_action(draft) -> DraftReviewAction:
+    has_prior_rejection = any(review.action == DraftReviewAction.REJECTED for review in draft.reviews)
+    return DraftReviewAction.RESUBMITTED if has_prior_rejection else DraftReviewAction.SUBMITTED
+
+
+def _available_actions(role, draft) -> list[DraftReviewAction]:
+    workflow = _get_draft_workflow(draft)
+    current_stage = get_workflow_stage_or_raise(workflow, draft.status)
+    review_stage = get_workflow_stage_by_type(workflow, DraftStageType.REVIEW)
     actions: list[DraftReviewAction] = []
 
     if role in REVIEW_WORKFLOW_ROLES:
         actions.append(DraftReviewAction.COMMENTED)
-        if status == DraftStatus.IN_REVIEW:
+        if current_stage.stage_type == DraftStageType.REVIEW:
             actions.extend([DraftReviewAction.APPROVED, DraftReviewAction.REJECTED])
 
     if role in WORKSPACE_MANAGEMENT_ROLES:
-        if status in {DraftStatus.IDEA, DraftStatus.DRAFT}:
-            actions.append(DraftReviewAction.SUBMITTED)
-        if status == DraftStatus.REJECTED:
-            actions.append(DraftReviewAction.RESUBMITTED)
+        if current_stage.stage_type != DraftStageType.REVIEW and is_workflow_transition_allowed(
+            workflow,
+            current_stage.key,
+            review_stage.key,
+        ):
+            actions.append(_review_submission_action(draft))
 
     return actions
 
 
 def _build_review_thread(draft, membership) -> DraftReviewThreadRead:
+    workflow = _get_draft_workflow(draft)
     return DraftReviewThreadRead(
         draft_id=draft.id,
         current_user_role=membership.role,
-        available_actions=_available_actions(membership.role, _coerce_status(draft.status)),
-        reviews=[_serialize_review(review) for review in draft.reviews],
+        available_actions=_available_actions(membership.role, draft),
+        reviews=[_serialize_review(review, workflow) for review in draft.reviews],
     )
 
 
@@ -71,8 +95,8 @@ def _create_review_entry(
     actor_user_id: int,
     action: DraftReviewAction,
     comment: str | None,
-    from_status: DraftStatus | None,
-    to_status: DraftStatus | None,
+    from_status: str | None,
+    to_status: str | None,
 ) -> DraftReview:
     review = DraftReview(
         draft_id=draft.id,
@@ -198,7 +222,7 @@ def get_draft_review_thread(db: Session, *, draft_id: int, user: User) -> DraftR
 
 
 def list_review_queue(db: Session, *, user: User) -> list[ContentDraftRead]:
-    return list_drafts(db, user=user, status=DraftStatus.IN_REVIEW)
+    return [draft for draft in list_drafts(db, user=user) if draft.status_type == DraftStageType.REVIEW]
 
 
 def add_review_comment(
@@ -215,7 +239,8 @@ def add_review_comment(
         "You do not have permission to review drafts.",
     )
 
-    current_status = _coerce_status(draft.status)
+    workflow = _get_draft_workflow(draft)
+    current_status = draft.status
     review = _create_review_entry(
         db,
         draft=draft,
@@ -232,11 +257,11 @@ def add_review_comment(
         entity_type="draft_review",
         entity_id=review.id,
         action="draft.review_commented",
-        metadata={"campaign_id": draft.campaign_id, "draft_id": draft.id, "status": current_status.value},
+        metadata={"campaign_id": draft.campaign_id, "draft_id": draft.id, "status": current_status},
     )
     db.commit()
     db.refresh(review, attribute_names=["actor"])
-    return _serialize_review(review)
+    return _serialize_review(review, workflow)
 
 
 def submit_draft_for_review(
@@ -253,28 +278,44 @@ def submit_draft_for_review(
         "You do not have permission to submit drafts for review.",
     )
 
-    previous_status = _coerce_status(draft.status)
-    if previous_status not in {DraftStatus.IDEA, DraftStatus.DRAFT}:
-        raise ValueError("Only idea or draft items can be submitted for review.")
+    workflow = _get_draft_workflow(draft)
+    previous_status = draft.status
+    review_stage = get_workflow_stage_by_type(workflow, DraftStageType.REVIEW)
+    current_stage = get_workflow_stage_or_raise(workflow, previous_status)
+    if current_stage.stage_type == DraftStageType.REVIEW:
+        raise ValueError("This draft is already in the review stage.")
+    if not is_workflow_transition_allowed(workflow, previous_status, review_stage.key):
+        raise ValueError("This draft cannot be submitted for review from its current workflow stage.")
 
-    draft.status = DraftStatus.IN_REVIEW
+    action = _review_submission_action(draft)
+    if action == DraftReviewAction.RESUBMITTED:
+        draft.current_version_number += 1
+        _create_version_snapshot(
+            db,
+            draft=draft,
+            actor_user_id=user.id,
+            change_summary="Resubmitted after review feedback",
+        )
+
+    draft.status = review_stage.key
     review = _create_review_entry(
         db,
         draft=draft,
         actor_user_id=user.id,
-        action=DraftReviewAction.SUBMITTED,
+        action=action,
         comment=payload.comment,
         from_status=previous_status,
-        to_status=DraftStatus.IN_REVIEW,
+        to_status=review_stage.key,
     )
+    audit_action = "draft.resubmitted_for_review" if action == DraftReviewAction.RESUBMITTED else "draft.submitted_for_review"
     record_audit_log(
         db,
         brand_id=draft.campaign.project.brand_id,
         actor_user_id=user.id,
         entity_type="draft_review",
         entity_id=review.id,
-        action="draft.submitted_for_review",
-        metadata={"campaign_id": draft.campaign_id, "draft_id": draft.id, "from": previous_status.value, "to": "in_review"},
+        action=audit_action,
+        metadata={"campaign_id": draft.campaign_id, "draft_id": draft.id, "from": previous_status, "to": review_stage.key},
     )
     _notify_review_requested(db, draft=draft, actor_user=user, review_id=review.id)
     _sync_draft_calendar_item(db, draft=draft, actor_user_id=user.id)
@@ -297,11 +338,16 @@ def approve_draft(
         "You do not have permission to approve drafts.",
     )
 
-    previous_status = _coerce_status(draft.status)
-    if previous_status != DraftStatus.IN_REVIEW:
-        raise ValueError("Only drafts in review can be approved.")
+    workflow = _get_draft_workflow(draft)
+    previous_status = draft.status
+    current_stage = get_workflow_stage_or_raise(workflow, previous_status)
+    approved_stage = get_workflow_stage_by_type(workflow, DraftStageType.APPROVED)
+    if current_stage.stage_type != DraftStageType.REVIEW:
+        raise ValueError("Only drafts in the review stage can be approved.")
+    if not is_workflow_transition_allowed(workflow, previous_status, approved_stage.key):
+        raise ValueError("This workflow does not allow approval from the current review stage.")
 
-    draft.status = DraftStatus.APPROVED
+    draft.status = approved_stage.key
     review = _create_review_entry(
         db,
         draft=draft,
@@ -309,7 +355,7 @@ def approve_draft(
         action=DraftReviewAction.APPROVED,
         comment=payload.comment,
         from_status=previous_status,
-        to_status=DraftStatus.APPROVED,
+        to_status=approved_stage.key,
     )
     record_audit_log(
         db,
@@ -318,7 +364,7 @@ def approve_draft(
         entity_type="draft_review",
         entity_id=review.id,
         action="draft.review_approved",
-        metadata={"campaign_id": draft.campaign_id, "draft_id": draft.id, "from": previous_status.value, "to": "approved"},
+        metadata={"campaign_id": draft.campaign_id, "draft_id": draft.id, "from": previous_status, "to": approved_stage.key},
     )
     _notify_draft_decision(
         db,
@@ -347,13 +393,18 @@ def reject_draft(
         "You do not have permission to reject drafts.",
     )
 
-    previous_status = _coerce_status(draft.status)
-    if previous_status != DraftStatus.IN_REVIEW:
-        raise ValueError("Only drafts in review can be rejected.")
+    workflow = _get_draft_workflow(draft)
+    previous_status = draft.status
+    current_stage = get_workflow_stage_or_raise(workflow, previous_status)
+    changes_requested_stage = get_workflow_stage_by_type(workflow, DraftStageType.CHANGES_REQUESTED)
+    if current_stage.stage_type != DraftStageType.REVIEW:
+        raise ValueError("Only drafts in the review stage can be rejected.")
+    if not is_workflow_transition_allowed(workflow, previous_status, changes_requested_stage.key):
+        raise ValueError("This workflow does not allow rejection from the current review stage.")
     if not payload.comment or not payload.comment.strip():
         raise ValueError("A rejection comment is required.")
 
-    draft.status = DraftStatus.REJECTED
+    draft.status = changes_requested_stage.key
     review = _create_review_entry(
         db,
         draft=draft,
@@ -361,7 +412,7 @@ def reject_draft(
         action=DraftReviewAction.REJECTED,
         comment=payload.comment,
         from_status=previous_status,
-        to_status=DraftStatus.REJECTED,
+        to_status=changes_requested_stage.key,
     )
     record_audit_log(
         db,
@@ -370,7 +421,7 @@ def reject_draft(
         entity_type="draft_review",
         entity_id=review.id,
         action="draft.review_rejected",
-        metadata={"campaign_id": draft.campaign_id, "draft_id": draft.id, "from": previous_status.value, "to": "rejected"},
+        metadata={"campaign_id": draft.campaign_id, "draft_id": draft.id, "from": previous_status, "to": changes_requested_stage.key},
     )
     _notify_draft_decision(
         db,
@@ -392,51 +443,4 @@ def resubmit_draft(
     payload: DraftReviewDecision,
     user: User,
 ) -> ContentDraftRead:
-    draft, membership = _get_draft_with_role(db, draft_id=draft_id, user_id=user.id)
-    require_role(
-        membership.role,
-        WORKSPACE_MANAGEMENT_ROLES,
-        "You do not have permission to resubmit drafts.",
-    )
-
-    previous_status = _coerce_status(draft.status)
-    if previous_status != DraftStatus.REJECTED:
-        raise ValueError("Only rejected drafts can be resubmitted.")
-
-    draft.current_version_number += 1
-    draft.status = DraftStatus.IN_REVIEW
-    _create_version_snapshot(
-        db,
-        draft=draft,
-        actor_user_id=user.id,
-        change_summary="Resubmitted after review feedback",
-    )
-    review = _create_review_entry(
-        db,
-        draft=draft,
-        actor_user_id=user.id,
-        action=DraftReviewAction.RESUBMITTED,
-        comment=payload.comment,
-        from_status=previous_status,
-        to_status=DraftStatus.IN_REVIEW,
-    )
-    record_audit_log(
-        db,
-        brand_id=draft.campaign.project.brand_id,
-        actor_user_id=user.id,
-        entity_type="draft_review",
-        entity_id=review.id,
-        action="draft.resubmitted_for_review",
-        metadata={
-            "campaign_id": draft.campaign_id,
-            "draft_id": draft.id,
-            "from": previous_status.value,
-            "to": "in_review",
-            "version_number": draft.current_version_number,
-        },
-    )
-    _notify_review_requested(db, draft=draft, actor_user=user, review_id=review.id)
-    _sync_draft_calendar_item(db, draft=draft, actor_user_id=user.id)
-    db.commit()
-    db.refresh(draft)
-    return _serialize_draft(draft)
+    return submit_draft_for_review(db, draft_id=draft_id, payload=payload, user=user)

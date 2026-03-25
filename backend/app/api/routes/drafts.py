@@ -2,7 +2,6 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
-from app.core.enums import DraftStatus
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.assignment import AssignmentCreate, AssignmentRead
@@ -46,7 +45,7 @@ def _raise_service_error(exc: Exception) -> None:
 def read_drafts(
     campaign_id: int | None = None,
     platform: str | None = None,
-    status: DraftStatus | None = None,
+    status: str | None = None,
     search: str | None = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),

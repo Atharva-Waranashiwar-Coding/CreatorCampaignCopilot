@@ -432,6 +432,7 @@ def summarize_review_feedback(
         brand_id=draft.brand_id,
         brand_name=draft.brand_name,
         current_status=draft.status,
+        current_status_label=draft.status_label,
         current_user_role=review_thread.current_user_role,
         review_count=len(review_thread.reviews),
         latest_action=latest_action,

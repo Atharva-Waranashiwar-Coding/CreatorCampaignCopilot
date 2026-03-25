@@ -2,7 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.core.enums import DraftReviewAction, DraftStatus
+from app.core.enums import DraftReviewAction, DraftStageType
 
 
 class ContentDraftCreate(BaseModel):
@@ -11,7 +11,7 @@ class ContentDraftCreate(BaseModel):
     platform: str = Field(min_length=2, max_length=120)
     content_type: str = Field(min_length=2, max_length=120)
     content_body: str | None = None
-    status: DraftStatus = DraftStatus.DRAFT
+    status: str | None = Field(default=None, min_length=2, max_length=80)
     planned_publish_at: datetime | None = None
 
 
@@ -20,12 +20,12 @@ class ContentDraftUpdate(BaseModel):
     platform: str | None = Field(default=None, min_length=2, max_length=120)
     content_type: str | None = Field(default=None, min_length=2, max_length=120)
     content_body: str | None = None
-    status: DraftStatus | None = None
+    status: str | None = Field(default=None, min_length=2, max_length=80)
     planned_publish_at: datetime | None = None
 
 
 class ContentDraftStageMove(BaseModel):
-    target_status: DraftStatus
+    target_status: str = Field(min_length=2, max_length=80)
     comment: str | None = Field(default=None, max_length=5000)
 
 
@@ -43,7 +43,10 @@ class ContentDraftRead(BaseModel):
     platform: str
     content_type: str
     content_body: str | None
-    status: DraftStatus
+    status: str
+    status_label: str
+    status_type: DraftStageType
+    status_color: str
     planned_publish_at: datetime | None
     current_version_number: int
     created_by: int
@@ -55,6 +58,8 @@ class ContentDraftRead(BaseModel):
     updated_at: datetime
 
 
-class DraftStatusCount(BaseModel):
-    status: DraftStatus
+class DraftWorkflowStageCount(BaseModel):
+    status: str
+    status_label: str
+    status_type: DraftStageType
     count: int

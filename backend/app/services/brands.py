@@ -10,6 +10,10 @@ from app.core.enums import BrandRole, MembershipStatus
 from app.core.permissions import BRAND_MANAGEMENT_ROLES, BRAND_OWNER_ONLY_ROLES, require_role
 from app.models.brand import Brand
 from app.models.brand_membership import BrandMembership
+from app.models.content_draft import ContentDraft
+from app.models.campaign import Campaign
+from app.models.draft_review import DraftReview
+from app.models.draft_version import DraftVersion
 from app.models.project import Project
 from app.models.user import User
 from app.schemas.brand import BrandCreate, BrandRead, BrandUpdate
@@ -18,6 +22,7 @@ from app.schemas.user import UserRead
 from app.services.access import assert_brand_limit_available, create_default_brand_subscription
 from app.services.audit import record_audit_log
 from app.services.auth import get_user_by_email
+from app.services.draft_workflows import get_brand_draft_workflow, normalize_brand_draft_workflow
 
 
 def _slugify(value: str) -> str:
@@ -57,6 +62,7 @@ def _serialize_brand(brand: Brand, role: BrandRole) -> BrandRead:
         target_audience=brand.target_audience,
         preferred_channels=brand.preferred_channels,
         guidelines_summary=brand.guidelines_summary,
+        draft_workflow=get_brand_draft_workflow(brand),
         created_by=brand.created_by,
         created_at=brand.created_at,
         updated_at=brand.updated_at,
@@ -135,6 +141,7 @@ def create_brand(db: Session, *, payload: BrandCreate, user: User) -> BrandRead:
         target_audience=payload.target_audience,
         preferred_channels=payload.preferred_channels,
         guidelines_summary=payload.guidelines_summary,
+        draft_workflow_config=normalize_brand_draft_workflow(payload.draft_workflow),
         created_by=user.id,
     )
     db.add(brand)
@@ -195,6 +202,67 @@ def update_brand(db: Session, *, brand_id: int, payload: BrandUpdate, user: User
         if field in data:
             setattr(brand, field, data[field])
             changes[field] = data[field]
+    if "draft_workflow" in data and data["draft_workflow"] is not None:
+        normalized_workflow = normalize_brand_draft_workflow(payload.draft_workflow)
+        active_statuses = {
+            status
+            for status in db.scalars(
+                select(ContentDraft.status)
+                .join(Campaign, Campaign.id == ContentDraft.campaign_id)
+                .join(Project, Project.id == Campaign.project_id)
+                .where(Project.brand_id == brand.id)
+                .distinct()
+            ).all()
+            if status is not None
+        }
+        version_statuses = {
+            status
+            for status in db.scalars(
+                select(DraftVersion.status)
+                .join(ContentDraft, ContentDraft.id == DraftVersion.draft_id)
+                .join(Campaign, Campaign.id == ContentDraft.campaign_id)
+                .join(Project, Project.id == Campaign.project_id)
+                .where(Project.brand_id == brand.id)
+                .distinct()
+            ).all()
+            if status is not None
+        }
+        review_statuses = {
+            status
+            for status in db.scalars(
+                select(DraftReview.from_status)
+                .join(ContentDraft, ContentDraft.id == DraftReview.draft_id)
+                .join(Campaign, Campaign.id == ContentDraft.campaign_id)
+                .join(Project, Project.id == Campaign.project_id)
+                .where(Project.brand_id == brand.id)
+                .distinct()
+            ).all()
+            if status is not None
+        }
+        review_statuses.update(
+            {
+                status
+                for status in db.scalars(
+                    select(DraftReview.to_status)
+                    .join(ContentDraft, ContentDraft.id == DraftReview.draft_id)
+                    .join(Campaign, Campaign.id == ContentDraft.campaign_id)
+                    .join(Project, Project.id == Campaign.project_id)
+                    .where(Project.brand_id == brand.id)
+                    .distinct()
+                ).all()
+                if status is not None
+            }
+        )
+        supported_stage_keys = {str(stage["key"]) for stage in normalized_workflow}
+        missing_stage_keys = sorted((active_statuses | version_statuses | review_statuses) - supported_stage_keys)
+        if missing_stage_keys:
+            missing_list = ", ".join(missing_stage_keys)
+            raise ValueError(
+                "The updated workflow would strand current or historical draft states. "
+                f"Add stages for these stored statuses first: {missing_list}."
+            )
+        brand.draft_workflow_config = normalized_workflow
+        changes["draft_workflow"] = normalized_workflow
 
     record_audit_log(
         db,
