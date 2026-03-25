@@ -1,10 +1,11 @@
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
-from app.core.enums import CampaignStatus, MembershipStatus
+from app.core.enums import CampaignStatus, DraftStatus, MembershipStatus
 from app.models.audit_log import AuditLog
 from app.models.brand_membership import BrandMembership
 from app.models.campaign import Campaign
+from app.models.content_draft import ContentDraft
 from app.models.project import Project
 from app.models.user import User
 from app.schemas.audit_log import AuditLogRead
@@ -24,6 +25,8 @@ def get_dashboard_summary(db: Session, *, user: User) -> DashboardSummary:
             project_count=0,
             campaign_count=0,
             active_campaign_count=0,
+            draft_count=0,
+            in_review_draft_count=0,
             recent_activity=[],
         )
 
@@ -37,6 +40,21 @@ def get_dashboard_summary(db: Session, *, user: User) -> DashboardSummary:
         .where(
             Project.brand_id.in_(brand_ids),
             Campaign.status == CampaignStatus.ACTIVE,
+        )
+    ) or 0
+    draft_count = db.scalar(
+        select(func.count(ContentDraft.id))
+        .join(Campaign, Campaign.id == ContentDraft.campaign_id)
+        .join(Project, Project.id == Campaign.project_id)
+        .where(Project.brand_id.in_(brand_ids))
+    ) or 0
+    in_review_draft_count = db.scalar(
+        select(func.count(ContentDraft.id))
+        .join(Campaign, Campaign.id == ContentDraft.campaign_id)
+        .join(Project, Project.id == Campaign.project_id)
+        .where(
+            Project.brand_id.in_(brand_ids),
+            ContentDraft.status == DraftStatus.IN_REVIEW,
         )
     ) or 0
 
@@ -53,6 +71,8 @@ def get_dashboard_summary(db: Session, *, user: User) -> DashboardSummary:
         project_count=project_count,
         campaign_count=campaign_count,
         active_campaign_count=active_campaign_count,
+        draft_count=draft_count,
+        in_review_draft_count=in_review_draft_count,
         recent_activity=[
             AuditLogRead(
                 id=log.id,
