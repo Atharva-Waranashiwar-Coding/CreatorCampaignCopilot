@@ -10,6 +10,12 @@ export type DraftStatus =
   | "scheduled"
   | "published"
   | "rejected";
+export type DraftReviewAction =
+  | "commented"
+  | "submitted"
+  | "approved"
+  | "rejected"
+  | "resubmitted";
 
 export type User = {
   id: number;
@@ -122,8 +128,31 @@ export type ContentDraft = {
   current_version_number: number;
   created_by: number;
   creator_name: string | null;
+  review_count: number;
+  latest_review_action: DraftReviewAction | null;
+  latest_reviewed_at: string | null;
   created_at: string;
   updated_at: string;
+};
+
+export type DraftReview = {
+  id: number;
+  draft_id: number;
+  actor_user_id: number;
+  actor_name: string | null;
+  action: DraftReviewAction;
+  comment: string | null;
+  version_number: number;
+  from_status: DraftStatus | null;
+  to_status: DraftStatus | null;
+  created_at: string;
+};
+
+export type DraftReviewThread = {
+  draft_id: number;
+  current_user_role: BrandRole;
+  available_actions: DraftReviewAction[];
+  reviews: DraftReview[];
 };
 
 export type DraftStatusCount = {
@@ -136,6 +165,7 @@ export type CampaignOverview = {
   brief: ContentBrief | null;
   drafts: ContentDraft[];
   status_breakdown: DraftStatusCount[];
+  activity_timeline: AuditLog[];
 };
 
 export type AuditLog = {
@@ -156,6 +186,7 @@ export type DashboardSummary = {
   campaign_count: number;
   active_campaign_count: number;
   draft_count: number;
-  in_review_draft_count: number;
+  pending_review_count: number;
+  approved_draft_count: number;
   recent_activity: AuditLog[];
 };

@@ -22,3 +22,7 @@ export function formatDate(value: string | null | undefined) {
 export function formatStatusLabel(value: string) {
   return value.replace(/_/g, " ");
 }
+
+export function formatActionLabel(value: string) {
+  return value.replace(/[._]/g, " ");
+}
