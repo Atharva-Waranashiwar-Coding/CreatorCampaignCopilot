@@ -47,6 +47,14 @@ class DraftStageType(StrEnum):
     CHANGES_REQUESTED = "changes_requested"
 
 
+class CampaignMilestoneKey(StrEnum):
+    BRIEF_APPROVED = "brief_approved"
+    FIRST_DRAFTS_READY = "first_drafts_ready"
+    ALL_REVIEWS_COMPLETE = "all_reviews_complete"
+    CAMPAIGN_LAUNCH_READY = "campaign_launch_ready"
+    CAMPAIGN_COMPLETED = "campaign_completed"
+
+
 class DraftReviewAction(StrEnum):
     COMMENTED = "commented"
     SUBMITTED = "submitted"

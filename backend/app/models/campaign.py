@@ -65,3 +65,9 @@ class Campaign(TimestampMixin, Base):
         lazy="selectin",
         order_by="Assignment.created_at.desc()",
     )
+    milestones: Mapped[list["CampaignMilestone"]] = relationship(
+        back_populates="campaign",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+        order_by="CampaignMilestone.sort_order.asc()",
+    )

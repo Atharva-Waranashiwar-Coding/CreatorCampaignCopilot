@@ -7,6 +7,7 @@ from app.models.user import User
 from app.schemas.assignment import AssignmentCreate, AssignmentRead
 from app.schemas.campaign import CampaignCreate, CampaignRead, CampaignUpdate
 from app.schemas.campaign_asset import CampaignAssetCreate, CampaignAssetRead, CampaignAssetUpdate
+from app.schemas.campaign_milestone import CampaignMilestoneRead, CampaignMilestoneUpdate
 from app.schemas.campaign_workspace import CampaignOverviewRead
 from app.schemas.collaboration_comment import CollaborationCommentCreate, CollaborationCommentRead
 from app.services.assignments import create_campaign_assignment, list_campaign_assignments
@@ -24,6 +25,7 @@ from app.services.campaigns import (
     list_campaigns,
     update_campaign,
 )
+from app.services.campaign_milestones import list_campaign_milestones, update_campaign_milestone
 from app.services.comments import create_campaign_comment, list_campaign_comments
 
 router = APIRouter()
@@ -69,6 +71,38 @@ def read_campaign_overview(
 ) -> CampaignOverviewRead:
     try:
         return get_campaign_overview(db, campaign_id=campaign_id, user=current_user)
+    except Exception as exc:
+        _raise_service_error(exc)
+
+
+@router.get("/{campaign_id}/milestones", response_model=list[CampaignMilestoneRead])
+def read_campaign_milestones(
+    campaign_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[CampaignMilestoneRead]:
+    try:
+        return list_campaign_milestones(db, campaign_id=campaign_id, user=current_user)
+    except Exception as exc:
+        _raise_service_error(exc)
+
+
+@router.patch("/{campaign_id}/milestones/{milestone_id}", response_model=CampaignMilestoneRead)
+def update_campaign_milestone_route(
+    campaign_id: int,
+    milestone_id: int,
+    payload: CampaignMilestoneUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> CampaignMilestoneRead:
+    try:
+        return update_campaign_milestone(
+            db,
+            campaign_id=campaign_id,
+            milestone_id=milestone_id,
+            payload=payload,
+            user=current_user,
+        )
     except Exception as exc:
         _raise_service_error(exc)
 

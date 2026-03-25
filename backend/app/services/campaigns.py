@@ -10,6 +10,7 @@ from app.models.brand_membership import BrandMembership
 from app.models.calendar_item import CalendarItem
 from app.models.campaign import Campaign
 from app.models.campaign_asset import CampaignAsset
+from app.models.campaign_milestone import CampaignMilestone
 from app.models.content_draft import ContentDraft
 from app.models.draft_version import DraftVersion
 from app.models.project import Project
@@ -24,6 +25,7 @@ from app.schemas.content_draft import ContentDraftRead, DraftWorkflowStageCount
 from app.schemas.draft_version import DraftVersionRead
 from app.services.access import assert_brand_limit_available
 from app.services.audit import record_audit_log
+from app.services.campaign_milestones import ensure_campaign_milestones, serialize_campaign_milestone
 from app.services.draft_workflows import get_brand_draft_workflow, get_workflow_stage_or_raise
 
 
@@ -134,6 +136,7 @@ def _get_campaign_with_role(db: Session, *, campaign_id: int, user_id: int) -> t
             selectinload(Campaign.project).selectinload(Project.brand),
             selectinload(Campaign.brief),
             selectinload(Campaign.assets).joinedload(CampaignAsset.creator),
+            selectinload(Campaign.milestones).joinedload(CampaignMilestone.completed_by),
             selectinload(Campaign.calendar_items).joinedload(CalendarItem.creator),
             selectinload(Campaign.calendar_items).joinedload(CalendarItem.draft),
             selectinload(Campaign.drafts).selectinload(ContentDraft.creator),
@@ -259,6 +262,8 @@ def _belongs_to_campaign(log: AuditLog, campaign_id: int) -> bool:
 
 def get_campaign_overview(db: Session, *, campaign_id: int, user: User) -> CampaignOverviewRead:
     campaign, _ = _get_campaign_with_role(db, campaign_id=campaign_id, user_id=user.id)
+    ensure_campaign_milestones(db, campaign=campaign)
+    db.refresh(campaign, attribute_names=["milestones"])
     ordered_drafts = sorted(campaign.drafts, key=lambda draft: draft.created_at, reverse=True)
     workflow = get_brand_draft_workflow(campaign.project.brand)
     status_counts = Counter(_coerce_draft_status(draft.status) for draft in ordered_drafts)
@@ -295,6 +300,7 @@ def get_campaign_overview(db: Session, *, campaign_id: int, user: User) -> Campa
         brief=_serialize_brief_for_campaign(campaign),
         drafts=[_serialize_draft_for_campaign(draft) for draft in ordered_drafts],
         assets=[_serialize_asset(asset) for asset in campaign.assets],
+        milestones=[serialize_campaign_milestone(milestone) for milestone in campaign.milestones],
         recent_versions=[_serialize_draft_version(version) for version in recent_versions],
         schedule=[_serialize_calendar_item(item) for item in campaign.calendar_items],
         status_breakdown=[
@@ -366,6 +372,7 @@ def create_campaign(db: Session, *, payload: CampaignCreate, user: User) -> Camp
     )
     db.add(campaign)
     db.flush()
+    ensure_campaign_milestones(db, campaign=campaign)
 
     record_audit_log(
         db,

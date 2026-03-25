@@ -6,6 +6,7 @@ from app.models.calendar_item import CalendarItem
 from app.models.brand_subscription import BrandSubscription
 from app.models.campaign import Campaign
 from app.models.campaign_asset import CampaignAsset
+from app.models.campaign_milestone import CampaignMilestone
 from app.models.collaboration_comment import CollaborationComment
 from app.models.content_brief import ContentBrief
 from app.models.content_draft import ContentDraft
@@ -28,6 +29,7 @@ __all__ = [
     "CalendarItem",
     "Campaign",
     "CampaignAsset",
+    "CampaignMilestone",
     "CollaborationComment",
     "ContentBrief",
     "ContentDraft",

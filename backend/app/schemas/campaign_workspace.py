@@ -4,6 +4,7 @@ from pydantic import BaseModel
 
 from app.schemas.audit_log import AuditLogRead
 from app.schemas.calendar_item import CalendarItemRead
+from app.schemas.campaign_milestone import CampaignMilestoneRead
 from app.schemas.campaign import CampaignRead
 from app.schemas.campaign_asset import CampaignAssetRead
 from app.schemas.content_brief import ContentBriefRead
@@ -30,6 +31,7 @@ class CampaignOverviewRead(BaseModel):
     brief: ContentBriefRead | None
     drafts: list[ContentDraftRead]
     assets: list[CampaignAssetRead]
+    milestones: list[CampaignMilestoneRead]
     recent_versions: list[DraftVersionRead]
     schedule: list[CalendarItemRead]
     status_breakdown: list[DraftWorkflowStageCount]
