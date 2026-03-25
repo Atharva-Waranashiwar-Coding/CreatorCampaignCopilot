@@ -2,6 +2,9 @@ export type BrandRole = "owner" | "admin" | "editor" | "reviewer" | "viewer";
 export type MembershipStatus = "invited" | "active" | "suspended";
 export type ProjectStatus = "active" | "archived";
 export type CampaignStatus = "planning" | "active" | "completed" | "archived";
+export type CommentEntityType = "campaign" | "draft";
+export type AssignmentEntityType = "campaign" | "draft" | "review_task";
+export type AssignmentStatus = "open" | "completed" | "canceled";
 export type DraftStatus =
   | "idea"
   | "draft"
@@ -18,6 +21,13 @@ export type DraftReviewAction =
   | "resubmitted";
 export type PlanInterval = "monthly" | "yearly";
 export type SubscriptionStatus = "trialing" | "active" | "past_due" | "canceled";
+export type NotificationType =
+  | "mention"
+  | "review_requested"
+  | "draft_approved"
+  | "draft_rejected"
+  | "assignment_created"
+  | "due_soon";
 
 export type User = {
   id: number;
@@ -153,6 +163,52 @@ export type CampaignAsset = {
   updated_at: string;
 };
 
+export type Mention = {
+  id: number;
+  mentioned_user_id: number;
+  mentioned_user_name: string;
+  mentioned_user_email: string;
+  identifier: string;
+  created_at: string;
+};
+
+export type CollaborationComment = {
+  id: number;
+  brand_id: number;
+  entity_type: CommentEntityType;
+  entity_id: number;
+  campaign_id: number | null;
+  draft_id: number | null;
+  parent_comment_id: number | null;
+  author_user_id: number;
+  author_name: string | null;
+  body: string;
+  mentions: Mention[];
+  created_at: string;
+  updated_at: string;
+  replies: CollaborationComment[];
+};
+
+export type Assignment = {
+  id: number;
+  brand_id: number;
+  assignment_type: AssignmentEntityType;
+  campaign_id: number | null;
+  draft_id: number | null;
+  entity_id: number;
+  assignee_user_id: number;
+  assignee_name: string | null;
+  assignee_email: string | null;
+  assigned_by_user_id: number;
+  assigned_by_name: string | null;
+  note: string | null;
+  due_at: string | null;
+  status: AssignmentStatus;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type DraftVersion = {
   id: number;
   draft_id: number;
@@ -203,6 +259,7 @@ export type DraftReview = {
   actor_name: string | null;
   action: DraftReviewAction;
   comment: string | null;
+  mentions: Mention[];
   version_number: number;
   from_status: DraftStatus | null;
   to_status: DraftStatus | null;
@@ -397,6 +454,27 @@ export type ToolUsageLog = {
   request_payload: Record<string, unknown>;
   result_summary: Record<string, unknown>;
   created_at: string;
+};
+
+export type Notification = {
+  id: number;
+  user_id: number;
+  brand_id: number;
+  actor_user_id: number | null;
+  actor_name: string | null;
+  notification_type: NotificationType;
+  title: string;
+  body: string;
+  entity_type: string;
+  entity_id: number | null;
+  metadata: Record<string, unknown>;
+  read_at: string | null;
+  created_at: string;
+};
+
+export type NotificationSummary = {
+  unread_count: number;
+  recent_unread: Notification[];
 };
 
 export type BrandBillingSnapshot = {

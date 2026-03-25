@@ -1,6 +1,6 @@
 # Creator Campaign Copilot
 
-Phase 6 workspace for multi-brand campaign operations, helper tools, MCP exposure, templates, analytics, and subscription-aware usage controls.
+Phase 7 workspace for multi-brand campaign operations, collaboration workflows, helper tools, MCP exposure, templates, analytics, and subscription-aware usage controls.
 
 ## Stack
 
@@ -9,7 +9,7 @@ Phase 6 workspace for multi-brand campaign operations, helper tools, MCP exposur
 - Database: PostgreSQL
 - Dev environment: Docker Compose
 
-## Phase 6 scope
+## Phase 7 scope
 
 - Email/password auth scaffold with JWT access tokens
 - Core backend modules for users, brands, memberships, projects, campaigns, and audit logs
@@ -31,7 +31,12 @@ Phase 6 workspace for multi-brand campaign operations, helper tools, MCP exposur
 - Internal helper tools for brand guidelines, templates, content validation, campaign assets, and review summaries
 - Optional FastAPI-MCP exposure isolated behind helper-tool routes
 - Tool usage logging and admin visibility for helper tool availability and recent executions
-- Alembic migrations for Phases 1 through 6
+- Collaboration comments with threaded replies on campaigns and drafts
+- Mentions parsing for comments and review notes using `@email`
+- Assignment workflows for campaigns, drafts, and review tasks
+- In-app notifications for mentions, review requests, decisions, assignments, and due-soon reminders
+- Notifications center plus collaboration-aware campaign activity feed updates
+- Alembic migrations for Phases 1 through 7
 
 ## Quick start
 
@@ -64,7 +69,7 @@ The backend container runs `alembic upgrade head` before starting the FastAPI se
 - `MCP_ENABLE_SSE_TRANSPORT=false` leaves SSE off unless you explicitly need it.
 - The helper REST endpoints remain available under `/api/tools/helpers/*` even if the MCP layer is disabled.
 
-## Phase 6 workflow
+## Phase 7 workflow
 
 1. Create an account from the login page.
 2. Create a brand workspace.
@@ -84,6 +89,9 @@ The backend container runs `alembic upgrade head` before starting the FastAPI se
 16. Upgrade or rebalance the brand plan as usage approaches current limits.
 17. Review the helper tool catalog and recent tool activity from the Helper Tools page.
 18. Use the helper routes directly or through the MCP mount when an MCP client is configured.
+19. Assign campaign, draft, or review-task ownership directly from the workspace pages.
+20. Use `@email` mentions in draft discussion, campaign discussion, and review notes.
+21. Follow collaboration events from the notifications center and campaign activity feed.
 
 ## Backend entities in this phase
 
@@ -102,6 +110,10 @@ The backend container runs `alembic upgrade head` before starting the FastAPI se
 - `calendar_items`
 - `audit_logs`
 - `tool_usage_logs`
+- `collaboration_comments`
+- `mentions`
+- `assignments`
+- `notifications`
 
 ## API areas
 
@@ -114,14 +126,20 @@ The backend container runs `alembic upgrade head` before starting the FastAPI se
 - `/api/projects`
 - `/api/campaigns`
 - `/api/campaigns/{campaign_id}/overview`
+- `/api/campaigns/{campaign_id}/comments`
+- `/api/campaigns/{campaign_id}/assignments`
 - `/api/campaigns/{campaign_id}/brief`
 - `/api/drafts`
 - `/api/drafts/review-queue`
+- `/api/drafts/{draft_id}/comments`
+- `/api/drafts/{draft_id}/assignments`
 - `/api/drafts/{draft_id}/reviews`
 - `/api/drafts/{draft_id}/submit`
 - `/api/drafts/{draft_id}/approve`
 - `/api/drafts/{draft_id}/reject`
 - `/api/drafts/{draft_id}/resubmit`
+- `/api/assignments`
+- `/api/notifications`
 - `/api/templates`
 - `/api/tools/helpers`
 - `/api/tools/catalog`
@@ -139,3 +157,6 @@ The backend container runs `alembic upgrade head` before starting the FastAPI se
 - Usage checks are currently enforced for member count, active campaigns, upcoming scheduled items, and template count.
 - The MCP layer is optional. Base product routes remain available even if MCP is disabled or `fastapi-mcp` is unavailable at runtime.
 - Helper tool usage is recorded in `tool_usage_logs` with request, result summary, success state, and target metadata.
+- Collaboration permissions stay aligned to the existing brand-level RBAC model.
+- Assignment creation uses workspace-management roles, while assignees can complete their own open assignments.
+- Due-soon notifications are generated from open assignments with due dates inside the notification sync window.

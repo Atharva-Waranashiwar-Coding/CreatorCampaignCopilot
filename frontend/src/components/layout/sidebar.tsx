@@ -4,6 +4,7 @@ import { Button } from "../ui/button";
 
 const navItems = [
   { label: "Dashboard", to: "/" },
+  { label: "Notifications", to: "/notifications" },
   { label: "Brands", to: "/brands" },
   { label: "Projects", to: "/projects" },
   { label: "Campaigns", to: "/campaigns" },
@@ -16,12 +17,13 @@ const navItems = [
 ];
 
 type SidebarProps = {
+  notificationUnreadCount: number;
   userName: string;
   userEmail: string;
   onLogout: () => void;
 };
 
-export function Sidebar({ userName, userEmail, onLogout }: SidebarProps) {
+export function Sidebar({ notificationUnreadCount, userName, userEmail, onLogout }: SidebarProps) {
   const navigate = useNavigate();
 
   return (
@@ -50,7 +52,14 @@ export function Sidebar({ userName, userEmail, onLogout }: SidebarProps) {
               ].join(" ")
             }
           >
-            {item.label}
+            <span className="flex items-center justify-between gap-3">
+              <span>{item.label}</span>
+              {item.to === "/notifications" && notificationUnreadCount ? (
+                <span className="rounded-full bg-amber-300 px-2 py-0.5 text-xs font-semibold text-slate-900">
+                  {notificationUnreadCount}
+                </span>
+              ) : null}
+            </span>
           </NavLink>
         ))}
       </nav>

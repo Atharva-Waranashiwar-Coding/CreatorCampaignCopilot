@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
+import { AssignmentPanel } from "../components/collaboration/assignment-panel";
+import { ThreadedCommentsCard } from "../components/collaboration/threaded-comments-card";
 import { PageHeader } from "../components/shared/page-header";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
@@ -14,7 +16,16 @@ import { useAuthStore } from "../features/auth/auth-store";
 import { ApiError, apiRequest } from "../lib/api";
 import { formatActionLabel, formatDateTime, formatStatusLabel } from "../lib/format";
 import { queryClient } from "../lib/query-client";
-import type { ContentDraft, DraftReviewAction, DraftReviewThread, DraftVersion } from "../lib/types";
+import type {
+  Assignment,
+  AssignmentEntityType,
+  CollaborationComment,
+  ContentDraft,
+  DraftReviewAction,
+  DraftReviewThread,
+  DraftVersion,
+  Membership,
+} from "../lib/types";
 
 type DraftFormState = {
   title: string;
@@ -25,7 +36,6 @@ type DraftFormState = {
 };
 
 type WorkflowMutationInput = {
-  action: DraftReviewAction;
   body: Record<string, unknown>;
   path: string;
 };
@@ -34,6 +44,7 @@ export function DraftDetailPage() {
   const { draftId } = useParams();
   const navigate = useNavigate();
   const token = useAuthStore((state) => state.token);
+  const currentUser = useAuthStore((state) => state.user);
   const [form, setForm] = useState<DraftFormState | null>(null);
   const [reviewNote, setReviewNote] = useState("");
 
@@ -55,6 +66,24 @@ export function DraftDetailPage() {
     enabled: Boolean(draftId),
   });
 
+  const commentsQuery = useQuery({
+    queryKey: ["draft-comments", draftId],
+    queryFn: () => apiRequest<CollaborationComment[]>(`/drafts/${draftId}/comments`, {}, token),
+    enabled: Boolean(draftId),
+  });
+
+  const assignmentsQuery = useQuery({
+    queryKey: ["draft-assignments", draftId],
+    queryFn: () => apiRequest<Assignment[]>(`/drafts/${draftId}/assignments`, {}, token),
+    enabled: Boolean(draftId),
+  });
+
+  const membershipsQuery = useQuery({
+    queryKey: ["brand-memberships", draftQuery.data?.brand_id],
+    queryFn: () => apiRequest<Membership[]>(`/brands/${draftQuery.data?.brand_id}/memberships`, {}, token),
+    enabled: Boolean(draftQuery.data?.brand_id),
+  });
+
   useEffect(() => {
     if (!draftQuery.data) {
       return;
@@ -71,16 +100,20 @@ export function DraftDetailPage() {
 
   const updateMutation = useMutation({
     mutationFn: () =>
-      apiRequest<ContentDraft>(`/drafts/${draftId}`, {
-        method: "PATCH",
-        body: JSON.stringify({
-          title: form?.title,
-          platform: form?.platform,
-          content_type: form?.content_type,
-          content_body: form?.content_body || null,
-          planned_publish_at: form?.planned_publish_at || null,
-        }),
-      }, token),
+      apiRequest<ContentDraft>(
+        `/drafts/${draftId}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            title: form?.title,
+            platform: form?.platform,
+            content_type: form?.content_type,
+            content_body: form?.content_body || null,
+            planned_publish_at: form?.planned_publish_at || null,
+          }),
+        },
+        token,
+      ),
     onSuccess: (draft) => {
       invalidateDraftQueries(draft.campaign_id, String(draft.id));
     },
@@ -96,6 +129,70 @@ export function DraftDetailPage() {
       const campaignId = draftQuery.data?.campaign_id;
       await invalidateDraftQueries(campaignId, draftId);
       setReviewNote("");
+    },
+  });
+
+  const commentMutation = useMutation({
+    mutationFn: (payload: { body: string; parent_comment_id: number | null }) =>
+      apiRequest<CollaborationComment[]>(
+        `/drafts/${draftId}/comments`,
+        {
+          method: "POST",
+          body: JSON.stringify(payload),
+        },
+        token,
+      ),
+    onSuccess: async (comments) => {
+      queryClient.setQueryData(["draft-comments", draftId], comments);
+      if (draftQuery.data?.campaign_id) {
+        queryClient.invalidateQueries({ queryKey: ["campaign-overview", String(draftQuery.data.campaign_id)] });
+      }
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    },
+  });
+
+  const createAssignmentMutation = useMutation({
+    mutationFn: (payload: {
+      assignment_type?: AssignmentEntityType;
+      assignee_user_id: number;
+      note: string | null;
+      due_at: string | null;
+    }) =>
+      apiRequest<Assignment[]>(
+        `/drafts/${draftId}/assignments`,
+        {
+          method: "POST",
+          body: JSON.stringify(payload),
+        },
+        token,
+      ),
+    onSuccess: async (assignments) => {
+      queryClient.setQueryData(["draft-assignments", draftId], assignments);
+      queryClient.invalidateQueries({ queryKey: ["assignments", "mine"] });
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      if (draftQuery.data?.campaign_id) {
+        queryClient.invalidateQueries({ queryKey: ["campaign-overview", String(draftQuery.data.campaign_id)] });
+      }
+    },
+  });
+
+  const completeAssignmentMutation = useMutation({
+    mutationFn: (assignmentId: number) =>
+      apiRequest<Assignment>(
+        `/assignments/${assignmentId}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({ status: "completed" }),
+        },
+        token,
+      ),
+    onSuccess: async () => {
+      queryClient.invalidateQueries({ queryKey: ["draft-assignments", draftId] });
+      queryClient.invalidateQueries({ queryKey: ["assignments", "mine"] });
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      if (draftQuery.data?.campaign_id) {
+        queryClient.invalidateQueries({ queryKey: ["campaign-overview", String(draftQuery.data.campaign_id)] });
+      }
     },
   });
 
@@ -120,6 +217,8 @@ export function DraftDetailPage() {
   const draft = draftQuery.data;
   const reviewThread = reviewThreadQuery.data;
   const versions = versionsQuery.data ?? [];
+  const comments = commentsQuery.data ?? [];
+  const assignments = assignmentsQuery.data ?? [];
   const availableActions = reviewThread?.available_actions ?? [];
 
   if (draftQuery.isLoading || reviewThreadQuery.isLoading || versionsQuery.isLoading || !draft || !form || !reviewThread) {
@@ -254,7 +353,7 @@ export function DraftDetailPage() {
               <Field label="Review note">
                 <Textarea
                   className="min-h-[140px]"
-                  placeholder="Add reviewer feedback or editor resubmission context"
+                  placeholder="Add reviewer feedback or editor resubmission context. Use @email to mention teammates."
                   value={reviewNote}
                   onChange={(event) => setReviewNote(event.target.value)}
                 />
@@ -268,7 +367,6 @@ export function DraftDetailPage() {
                     disabled={workflowMutation.isPending || !reviewNote.trim()}
                     onClick={() =>
                       workflowMutation.mutate({
-                        action: "commented",
                         path: `/drafts/${draft.id}/reviews`,
                         body: { comment: reviewNote },
                       })
@@ -283,7 +381,6 @@ export function DraftDetailPage() {
                     disabled={workflowMutation.isPending}
                     onClick={() =>
                       workflowMutation.mutate({
-                        action: "submitted",
                         path: `/drafts/${draft.id}/submit`,
                         body: { comment: reviewNote || null },
                       })
@@ -298,7 +395,6 @@ export function DraftDetailPage() {
                     disabled={workflowMutation.isPending}
                     onClick={() =>
                       workflowMutation.mutate({
-                        action: "approved",
                         path: `/drafts/${draft.id}/approve`,
                         body: { comment: reviewNote || null },
                       })
@@ -312,7 +408,6 @@ export function DraftDetailPage() {
                     disabled={workflowMutation.isPending || !reviewNote.trim()}
                     onClick={() =>
                       workflowMutation.mutate({
-                        action: "rejected",
                         path: `/drafts/${draft.id}/reject`,
                         body: { comment: reviewNote || null },
                       })
@@ -327,7 +422,6 @@ export function DraftDetailPage() {
                     disabled={workflowMutation.isPending}
                     onClick={() =>
                       workflowMutation.mutate({
-                        action: "resubmitted",
                         path: `/drafts/${draft.id}/resubmit`,
                         body: { comment: reviewNote || null },
                       })
@@ -339,6 +433,25 @@ export function DraftDetailPage() {
               </div>
             </div>
           </Card>
+
+          <AssignmentPanel
+            assignmentTypeOptions={["draft", "review_task"]}
+            assignments={assignments}
+            currentUserId={currentUser?.id}
+            defaultAssignmentType="draft"
+            description="Assign ownership for revisions or route a focused review task to a reviewer."
+            emptyMessage="Assignments will appear here once draft work is delegated."
+            error={createAssignmentMutation.error || completeAssignmentMutation.error || assignmentsQuery.error}
+            eyebrow="Assignments"
+            isCompletingId={completeAssignmentMutation.variables ?? null}
+            isCreating={createAssignmentMutation.isPending}
+            isLoading={assignmentsQuery.isLoading}
+            memberError={membershipsQuery.error}
+            members={membershipsQuery.data ?? []}
+            onComplete={(assignmentId) => completeAssignmentMutation.mutate(assignmentId)}
+            onCreate={(payload) => createAssignmentMutation.mutateAsync(payload)}
+            title="Draft ownership"
+          />
 
           <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
             <div className="flex items-center justify-between gap-4">
@@ -398,7 +511,16 @@ export function DraftDetailPage() {
                     <p className="mt-2 text-sm text-muted-foreground">
                       {review.actor_name ?? "Unknown user"} · {formatDateTime(review.created_at)}
                     </p>
-                    {review.comment ? <p className="mt-3 text-sm leading-6 text-foreground">{review.comment}</p> : null}
+                    {review.comment ? <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-foreground">{review.comment}</p> : null}
+                    {review.mentions.length ? (
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {review.mentions.map((mention) => (
+                          <Badge key={mention.id} tone="default">
+                            @{mention.mentioned_user_email}
+                          </Badge>
+                        ))}
+                      </div>
+                    ) : null}
                     {review.from_status || review.to_status ? (
                       <p className="mt-3 text-xs uppercase tracking-[0.18em] text-muted-foreground">
                         {formatStatusLabel(review.from_status ?? "unknown")} to {formatStatusLabel(review.to_status ?? "unknown")}
@@ -415,6 +537,21 @@ export function DraftDetailPage() {
           </Card>
         </div>
       </div>
+
+      <div className="mt-8">
+        <ThreadedCommentsCard
+          comments={comments}
+          description="Use threaded discussion for contextual comments that should sit alongside the draft rather than inside the review decision log."
+          emptyMessage="No discussion yet. Start the first draft thread here."
+          error={commentMutation.error || commentsQuery.error}
+          eyebrow="Discussion"
+          isLoading={commentsQuery.isLoading}
+          isSubmitting={commentMutation.isPending}
+          onCreate={(payload) => commentMutation.mutateAsync(payload)}
+          placeholder="Add a draft comment. Use @email for mentions and reply inline to keep feedback threaded."
+          title="Draft discussion"
+        />
+      </div>
     </div>
   );
 }
@@ -424,11 +561,15 @@ async function invalidateDraftQueries(campaignId: number | undefined, draftId: s
     await queryClient.invalidateQueries({ queryKey: ["draft", draftId] });
     await queryClient.invalidateQueries({ queryKey: ["draft-reviews", draftId] });
     await queryClient.invalidateQueries({ queryKey: ["draft-versions", draftId] });
+    await queryClient.invalidateQueries({ queryKey: ["draft-comments", draftId] });
+    await queryClient.invalidateQueries({ queryKey: ["draft-assignments", draftId] });
   }
   await queryClient.invalidateQueries({ queryKey: ["drafts"] });
   await queryClient.invalidateQueries({ queryKey: ["review-queue"] });
   await queryClient.invalidateQueries({ queryKey: ["campaigns"] });
   await queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
+  await queryClient.invalidateQueries({ queryKey: ["assignments", "mine"] });
+  await queryClient.invalidateQueries({ queryKey: ["notifications"] });
   if (campaignId) {
     await queryClient.invalidateQueries({ queryKey: ["campaign-overview", String(campaignId)] });
   }
