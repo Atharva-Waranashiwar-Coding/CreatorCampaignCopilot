@@ -278,6 +278,18 @@ export type DraftStatusCount = {
   count: number;
 };
 
+export type CampaignPlanningSummary = {
+  total_drafts: number;
+  idea_count: number;
+  draft_count: number;
+  in_review_count: number;
+  approved_count: number;
+  scheduled_count: number;
+  published_count: number;
+  rejected_count: number;
+  next_planned_publish_at: string | null;
+};
+
 export type CampaignOverview = {
   campaign: Campaign;
   brief: ContentBrief | null;
@@ -286,6 +298,7 @@ export type CampaignOverview = {
   recent_versions: DraftVersion[];
   schedule: CalendarItem[];
   status_breakdown: DraftStatusCount[];
+  planning_summary: CampaignPlanningSummary;
   activity_timeline: AuditLog[];
 };
 

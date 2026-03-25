@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel
 
 from app.schemas.audit_log import AuditLogRead
@@ -9,6 +11,18 @@ from app.schemas.content_draft import ContentDraftRead, DraftStatusCount
 from app.schemas.draft_version import DraftVersionRead
 
 
+class CampaignPlanningSummaryRead(BaseModel):
+    total_drafts: int
+    idea_count: int
+    draft_count: int
+    in_review_count: int
+    approved_count: int
+    scheduled_count: int
+    published_count: int
+    rejected_count: int
+    next_planned_publish_at: datetime | None
+
+
 class CampaignOverviewRead(BaseModel):
     campaign: CampaignRead
     brief: ContentBriefRead | None
@@ -17,4 +31,5 @@ class CampaignOverviewRead(BaseModel):
     recent_versions: list[DraftVersionRead]
     schedule: list[CalendarItemRead]
     status_breakdown: list[DraftStatusCount]
+    planning_summary: CampaignPlanningSummaryRead
     activity_timeline: list[AuditLogRead]
