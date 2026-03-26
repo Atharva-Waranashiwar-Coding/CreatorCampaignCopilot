@@ -473,6 +473,8 @@ def _assert_helper_rate_limit_available(
     )
     retry_after_seconds: int | None = None
     if oldest_created_at is not None:
+        if oldest_created_at.tzinfo is None:
+            oldest_created_at = oldest_created_at.replace(tzinfo=UTC)
         retry_after_seconds = max(int((oldest_created_at + window - datetime.now(UTC)).total_seconds()), 1)
 
     raise HelperRateLimitError(

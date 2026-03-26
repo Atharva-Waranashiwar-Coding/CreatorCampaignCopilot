@@ -1029,7 +1029,7 @@ def review_feedback_to_revision_checklist(
             checklist_items=llm_attempt.payload.checklist_items[: payload.limit],
             preserved_strengths=_dedupe_preserve_order(llm_attempt.payload.preserved_strengths)[:5],
             source_comment_count=len(commented_reviews),
-            blocker_count=sum(1 for review in commented_reviews if review.action == DraftReviewAction.rejected),
+            blocker_count=sum(1 for review in commented_reviews if review.action == DraftReviewAction.REJECTED),
         )
 
     deterministic = _review_feedback_to_revision_checklist_deterministic(
@@ -1058,7 +1058,7 @@ def _review_feedback_to_revision_checklist_deterministic(
         if not comment_text:
             continue
 
-        if review.action == DraftReviewAction.approved:
+        if review.action == DraftReviewAction.APPROVED:
             preserved_strengths.append(_excerpt(comment_text, limit=160))
             continue
 
@@ -1088,7 +1088,7 @@ def _review_feedback_to_revision_checklist_deterministic(
             RevisionChecklistItem(
                 item="Confirm the next revision focus before resubmitting.",
                 priority="medium",
-                source_action=commented_reviews[0].action if commented_reviews else DraftReviewAction.commented,
+                source_action=commented_reviews[0].action if commented_reviews else DraftReviewAction.COMMENTED,
                 source_excerpt=fallback_excerpt,
                 guidance="Use the review thread to capture concrete changes so the next cycle is traceable.",
             )
@@ -1104,7 +1104,7 @@ def _review_feedback_to_revision_checklist_deterministic(
         checklist_items=checklist_items,
         preserved_strengths=_dedupe_preserve_order(preserved_strengths)[:5],
         source_comment_count=len(commented_reviews),
-        blocker_count=sum(1 for review in commented_reviews if review.action == DraftReviewAction.rejected),
+        blocker_count=sum(1 for review in commented_reviews if review.action == DraftReviewAction.REJECTED),
     )
 
 
@@ -1129,9 +1129,9 @@ def _feedback_to_action_item(segment: str) -> str:
 
 
 def _priority_for_action(action: DraftReviewAction) -> str:
-    if action == DraftReviewAction.rejected:
+    if action == DraftReviewAction.REJECTED:
         return "high"
-    if action == DraftReviewAction.resubmitted:
+    if action == DraftReviewAction.RESUBMITTED:
         return "low"
     return "medium"
 
