@@ -10,6 +10,7 @@ import { CoreHelperWorkbench } from "../components/helper-tools/core-helper-work
 import { AssignmentPanel } from "../components/collaboration/assignment-panel";
 import { ThreadedCommentsCard } from "../components/collaboration/threaded-comments-card";
 import { PageHeader } from "../components/shared/page-header";
+import { SectionTabs } from "../components/shared/section-tabs";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
@@ -45,6 +46,8 @@ type WorkflowMutationInput = {
   path: string;
 };
 
+type DraftWorkspaceTab = "editor" | "ai" | "workflow" | "discussion";
+
 export function DraftDetailPage() {
   const { draftId } = useParams();
   const navigate = useNavigate();
@@ -52,6 +55,7 @@ export function DraftDetailPage() {
   const currentUser = useAuthStore((state) => state.user);
   const [form, setForm] = useState<DraftFormState | null>(null);
   const [reviewNote, setReviewNote] = useState("");
+  const [workspaceTab, setWorkspaceTab] = useState<DraftWorkspaceTab>("editor");
   const bodyTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const draftQuery = useQuery({
@@ -226,6 +230,30 @@ export function DraftDetailPage() {
   const comments = commentsQuery.data ?? [];
   const assignments = assignmentsQuery.data ?? [];
   const availableActions = reviewThread?.available_actions ?? [];
+  const workspaceTabs = [
+    {
+      value: "editor",
+      label: "Editor",
+      description: "Edit the draft, preview the output, and save the next working version.",
+    },
+    {
+      value: "ai",
+      label: "AI Assist",
+      description: "Run helper tools where they actually operate against the current draft state.",
+    },
+    {
+      value: "workflow",
+      label: "Workflow",
+      badge: reviewThread?.reviews.length ?? 0,
+      description: "Manage review actions, ownership, and version history.",
+    },
+    {
+      value: "discussion",
+      label: "Discussion",
+      badge: comments.length,
+      description: "Thread draft-specific comments without mixing them into formal review decisions.",
+    },
+  ];
 
   const insertEditorSnippet = (snippet: string) => {
     setForm((current) => {
@@ -312,93 +340,116 @@ export function DraftDetailPage() {
         }
       />
 
-      <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
-        <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
-          <div className="flex flex-wrap items-center gap-3">
-            <Badge>{draft.platform}</Badge>
-            <Badge tone="muted">{draft.content_type}</Badge>
-            <Badge tone="muted">{reviewThread.current_user_role}</Badge>
-            <p className="text-sm text-muted-foreground">Updated {formatDateTime(draft.updated_at)}</p>
+      <Card className="border-white/70 bg-white/90 p-6 shadow-xl shadow-slate-900/5">
+        <div className="grid gap-6 xl:grid-cols-[1.08fr_0.92fr]">
+          <div>
+            <div className="flex flex-wrap items-center gap-3">
+              <Badge>{draft.platform}</Badge>
+              <Badge tone="muted">{draft.content_type}</Badge>
+              <Badge tone="muted">{reviewThread.current_user_role}</Badge>
+            </div>
+            <h2 className="mt-4 text-3xl font-semibold tracking-tight">Draft workspace</h2>
+            <p className="mt-3 max-w-3xl text-sm leading-7 text-muted-foreground">
+              Keep editing, AI assist, review workflow, and threaded discussion in separate workspace views so the
+              draft stays easier to scan and update.
+            </p>
           </div>
 
-          <form
-            className="mt-6 space-y-4"
-            onSubmit={(event) => {
-              event.preventDefault();
-              updateMutation.mutate();
-            }}
-          >
-            <Field label="Title">
-              <Input
-                value={form.title}
-                onChange={(event) => setForm((current) => (current ? { ...current, title: event.target.value } : current))}
-              />
-            </Field>
+          <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
+            <DraftSummaryCard label="Current status" value={draft.status_label} />
+            <DraftSummaryCard label="Saved version" value={`v${draft.current_version_number}`} />
+            <DraftSummaryCard label="Review events" value={reviewThread.reviews.length} />
+          </div>
+        </div>
 
-            <div className="grid gap-4 md:grid-cols-2">
-              <Field label="Platform">
+        <SectionTabs
+          className="mt-6"
+          items={workspaceTabs}
+          onChange={(value) => setWorkspaceTab(value as DraftWorkspaceTab)}
+          value={workspaceTab}
+        />
+      </Card>
+
+      {workspaceTab === "editor" ? (
+        <div className="mt-8 space-y-6">
+          <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
+            <form
+              className="space-y-4"
+              onSubmit={(event) => {
+                event.preventDefault();
+                updateMutation.mutate();
+              }}
+            >
+              <Field label="Title">
                 <Input
-                  value={form.platform}
-                  onChange={(event) => setForm((current) => (current ? { ...current, platform: event.target.value } : current))}
+                  value={form.title}
+                  onChange={(event) => setForm((current) => (current ? { ...current, title: event.target.value } : current))}
                 />
               </Field>
-              <Field label="Content type">
-                <Input
-                  value={form.content_type}
-                  onChange={(event) =>
-                    setForm((current) => (current ? { ...current, content_type: event.target.value } : current))
-                  }
-                />
-              </Field>
-            </div>
 
-            <Field label="Planned publish at">
-              <Input
-                type="datetime-local"
-                value={form.planned_publish_at}
-                onChange={(event) =>
-                  setForm((current) => (current ? { ...current, planned_publish_at: event.target.value } : current))
-                }
-              />
-            </Field>
-
-            <Field label="Draft body">
-              <div className="space-y-3">
-                <EditorToolbar onInsert={insertEditorSnippet} value={form.content_body} />
-                <Textarea
-                  ref={bodyTextareaRef}
-                  className="min-h-[260px]"
-                  value={form.content_body}
-                  onChange={(event) =>
-                    setForm((current) => (current ? { ...current, content_body: event.target.value } : current))
-                  }
-                />
+              <div className="grid gap-4 md:grid-cols-2">
+                <Field label="Platform">
+                  <Input
+                    value={form.platform}
+                    onChange={(event) => setForm((current) => (current ? { ...current, platform: event.target.value } : current))}
+                  />
+                </Field>
+                <Field label="Content type">
+                  <Input
+                    value={form.content_type}
+                    onChange={(event) =>
+                      setForm((current) => (current ? { ...current, content_type: event.target.value } : current))
+                    }
+                  />
+                </Field>
               </div>
-            </Field>
 
-            <MutationFeedback error={updateMutation.error || deleteMutation.error} />
-
-            <div className="flex flex-wrap gap-3">
-              <Button disabled={updateMutation.isPending} type="submit">
-                {updateMutation.isPending ? "Saving..." : "Save draft"}
-              </Button>
-              <Button
-                disabled={deleteMutation.isPending}
-                onClick={() => {
-                  if (window.confirm(`Delete ${draft.title}?`)) {
-                    deleteMutation.mutate();
+              <Field label="Planned publish at">
+                <Input
+                  type="datetime-local"
+                  value={form.planned_publish_at}
+                  onChange={(event) =>
+                    setForm((current) => (current ? { ...current, planned_publish_at: event.target.value } : current))
                   }
-                }}
-                type="button"
-                variant="danger"
-              >
-                {deleteMutation.isPending ? "Deleting..." : "Delete draft"}
-              </Button>
-            </div>
-          </form>
-        </Card>
+                />
+              </Field>
 
-        <div className="space-y-6">
+              <Field label="Draft body">
+                <div className="space-y-3">
+                  <EditorToolbar onInsert={insertEditorSnippet} value={form.content_body} />
+                  <Textarea
+                    ref={bodyTextareaRef}
+                    className="min-h-[260px]"
+                    value={form.content_body}
+                    onChange={(event) =>
+                      setForm((current) => (current ? { ...current, content_body: event.target.value } : current))
+                    }
+                  />
+                </div>
+              </Field>
+
+              <MutationFeedback error={updateMutation.error || deleteMutation.error} />
+
+              <div className="flex flex-wrap gap-3">
+                <Button disabled={updateMutation.isPending} type="submit">
+                  {updateMutation.isPending ? "Saving..." : "Save draft"}
+                </Button>
+                <Button
+                  disabled={deleteMutation.isPending}
+                  onClick={() => {
+                    if (window.confirm(`Delete ${draft.title}?`)) {
+                      deleteMutation.mutate();
+                    }
+                  }}
+                  type="button"
+                  variant="danger"
+                >
+                  {deleteMutation.isPending ? "Deleting..." : "Delete draft"}
+                </Button>
+              </div>
+            </form>
+          </Card>
+
           <PlatformPreview
             input={{
               brandName: draft.brand_name,
@@ -413,6 +464,25 @@ export function DraftDetailPage() {
               title: form.title,
             }}
           />
+        </div>
+      ) : null}
+
+      {workspaceTab === "ai" ? (
+        <div className="mt-8 space-y-6">
+          <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">AI Assist</p>
+                <h2 className="mt-2 text-2xl font-semibold tracking-tight">Run helpers against the current draft</h2>
+              </div>
+              <Badge tone="muted">Execution happens here</Badge>
+            </div>
+
+            <p className="mt-4 text-sm leading-6 text-muted-foreground">
+              This is the actual AI Assist surface. Core helpers fetch context and validate copy, while advanced
+              helpers can adapt content, recommend assets or templates, and convert feedback into a revision plan.
+            </p>
+          </Card>
 
           <CoreHelperWorkbench draft={draft} form={form} />
 
@@ -422,7 +492,11 @@ export function DraftDetailPage() {
             onInsertBodySnippet={insertEditorSnippet}
             onReplaceDraftValues={replaceDraftValuesFromHelper}
           />
+        </div>
+      ) : null}
 
+      {workspaceTab === "workflow" ? (
+        <div className="mt-8 space-y-6">
           <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
             <div className="flex items-center justify-between gap-4">
               <div>
@@ -630,22 +704,24 @@ export function DraftDetailPage() {
             </div>
           </Card>
         </div>
-      </div>
+      ) : null}
 
-      <div className="mt-8">
-        <ThreadedCommentsCard
-          comments={comments}
-          description="Use threaded discussion for contextual comments that should sit alongside the draft rather than inside the review decision log."
-          emptyMessage="No discussion yet. Start the first draft thread here."
-          error={commentMutation.error || commentsQuery.error}
-          eyebrow="Discussion"
-          isLoading={commentsQuery.isLoading}
-          isSubmitting={commentMutation.isPending}
-          onCreate={(payload) => commentMutation.mutateAsync(payload)}
-          placeholder="Add a draft comment. Use @email for mentions and reply inline to keep feedback threaded."
-          title="Draft discussion"
-        />
-      </div>
+      {workspaceTab === "discussion" ? (
+        <div className="mt-8">
+          <ThreadedCommentsCard
+            comments={comments}
+            description="Use threaded discussion for contextual comments that should sit alongside the draft rather than inside the review decision log."
+            emptyMessage="No discussion yet. Start the first draft thread here."
+            error={commentMutation.error || commentsQuery.error}
+            eyebrow="Discussion"
+            isLoading={commentsQuery.isLoading}
+            isSubmitting={commentMutation.isPending}
+            onCreate={(payload) => commentMutation.mutateAsync(payload)}
+            placeholder="Add a draft comment. Use @email for mentions and reply inline to keep feedback threaded."
+            title="Draft discussion"
+          />
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -687,6 +763,15 @@ function MutationFeedback({ error }: { error: unknown }) {
     <p className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
       {error instanceof ApiError ? error.message : "Request failed."}
     </p>
+  );
+}
+
+function DraftSummaryCard({ label, value }: { label: string; value: number | string }) {
+  return (
+    <div className="rounded-[1.25rem] border border-border bg-white/80 px-4 py-4">
+      <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">{label}</p>
+      <p className="mt-3 text-2xl font-semibold tracking-tight">{value}</p>
+    </div>
   );
 }
 
