@@ -27,13 +27,23 @@ class BrandSubscription(TimestampMixin, Base):
         index=True,
     )
     status: Mapped[SubscriptionStatus] = mapped_column(
-        SAEnum(SubscriptionStatus, name="subscription_status", native_enum=False),
+        SAEnum(
+            SubscriptionStatus,
+            name="subscription_status",
+            native_enum=False,
+            values_callable=lambda enum_cls: [member.value for member in enum_cls],
+        ),
         nullable=False,
         default=SubscriptionStatus.ACTIVE,
         index=True,
     )
     billing_interval: Mapped[PlanInterval] = mapped_column(
-        SAEnum(PlanInterval, name="plan_interval", native_enum=False),
+        SAEnum(
+            PlanInterval,
+            name="plan_interval",
+            native_enum=False,
+            values_callable=lambda enum_cls: [member.value for member in enum_cls],
+        ),
         nullable=False,
         default=PlanInterval.MONTHLY,
     )

@@ -77,11 +77,11 @@ export function BillingPage() {
   const canManagePlan = snapshot?.current_user_role === "owner" || snapshot?.current_user_role === "admin";
 
   return (
-    <div>
+    <div className="min-w-0">
       <PageHeader
         eyebrow="Billing"
-        title="Plan, usage, and upgrade controls"
-        description="Inspect the current subscription, monitor brand-level usage against plan limits, and change plans without leaving the workspace."
+        title="Plans and usage"
+        description="Check what the current plan unlocks, where usage is tightening, and when an upgrade actually matters."
         actions={(
           <div className="flex flex-wrap gap-3">
             <Select

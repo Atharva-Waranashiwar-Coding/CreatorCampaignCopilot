@@ -65,11 +65,11 @@ export function DashboardPage() {
     (healthReport?.summary.at_risk_count ?? 0) + (healthReport?.summary.critical_count ?? 0);
 
   return (
-    <div>
+    <div className="min-w-0">
       <PageHeader
         eyebrow="Dashboard"
-        title="Campaign operations with plan-aware visibility"
-        description="Track campaign health, team workload, approval bottlenecks, content mix, and scheduled delivery from a single operational view."
+        title="Campaign operating system"
+        description="See health, workload, approvals, and launch pressure without opening every workspace."
         actions={(
           <Select
             className="min-w-[220px]"
@@ -346,7 +346,7 @@ function HealthSummaryCard({
             </Badge>
           </div>
 
-          <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="mt-6 grid gap-3 md:grid-cols-2 2xl:grid-cols-4">
             <HealthCountPill label="Healthy" tone="success" value={healthyCount} />
             <HealthCountPill label="Watch" tone="warning" value={watchCount} />
             <HealthCountPill label="At risk" tone="warning" value={atRiskCount} />
@@ -617,9 +617,9 @@ function HealthCountPill({
   return (
     <div className="rounded-[1.2rem] border border-border bg-white/80 px-4 py-4">
       <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">{label}</p>
-      <div className="mt-3 flex items-center gap-3">
+      <div className="mt-3 flex items-center justify-between gap-3">
         <p className="text-2xl font-semibold tracking-tight">{value}</p>
-        <Badge tone={tone}>{label}</Badge>
+        <Badge className="max-w-full" tone={tone}>{label}</Badge>
       </div>
     </div>
   );

@@ -595,16 +595,17 @@ def get_dashboard_analytics(
         .group_by(Campaign.status)
     ).all()
 
+    interval_bucket = func.date_trunc(normalized_interval, ContentDraft.created_at)
     interval_bucket_rows = db.execute(
         select(
-            func.date_trunc(normalized_interval, ContentDraft.created_at),
+            interval_bucket,
             func.count(ContentDraft.id),
         )
         .join(Campaign, Campaign.id == ContentDraft.campaign_id)
         .join(Project, Project.id == Campaign.project_id)
         .where(Project.brand_id.in_(brand_ids))
-        .group_by(func.date_trunc(normalized_interval, ContentDraft.created_at))
-        .order_by(func.date_trunc(normalized_interval, ContentDraft.created_at).asc())
+        .group_by(interval_bucket)
+        .order_by(interval_bucket.asc())
     ).all()
 
     return DashboardAnalytics(

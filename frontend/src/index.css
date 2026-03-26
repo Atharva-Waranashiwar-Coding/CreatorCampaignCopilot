@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap");
 
 @tailwind base;
 @tailwind components;
@@ -6,15 +6,15 @@
 
 @layer base {
   :root {
-    --background: 42 33% 97%;
-    --foreground: 195 20% 14%;
+    --background: 40 36% 95%;
+    --foreground: 205 28% 14%;
     --card: 0 0% 100%;
-    --card-foreground: 195 20% 14%;
-    --primary: 194 77% 24%;
-    --primary-foreground: 48 78% 96%;
-    --muted: 40 30% 92%;
-    --muted-foreground: 195 10% 40%;
-    --border: 36 20% 82%;
+    --card-foreground: 205 28% 14%;
+    --primary: 194 69% 24%;
+    --primary-foreground: 48 100% 98%;
+    --muted: 38 28% 88%;
+    --muted-foreground: 205 13% 38%;
+    --border: 198 19% 81%;
     --radius: 1rem;
   }
 
@@ -26,11 +26,17 @@
     @apply bg-background font-sans text-foreground antialiased;
     min-height: 100vh;
     background-image:
-      radial-gradient(circle at top left, rgba(203, 166, 107, 0.28), transparent 28%),
-      radial-gradient(circle at bottom right, rgba(12, 86, 102, 0.16), transparent 34%);
+      radial-gradient(circle at top left, rgba(17, 110, 126, 0.18), transparent 30%),
+      radial-gradient(circle at right 14% top 10%, rgba(208, 153, 82, 0.22), transparent 18%),
+      radial-gradient(circle at bottom right, rgba(26, 52, 74, 0.14), transparent 24%),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(248, 242, 232, 0.92));
   }
 
   #root {
     min-height: 100vh;
+  }
+
+  ::selection {
+    background: rgba(15, 118, 135, 0.2);
   }
 }

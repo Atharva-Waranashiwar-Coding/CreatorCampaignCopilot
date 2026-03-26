@@ -78,14 +78,14 @@ export function DraftsPage() {
   }, [brandsQuery.data, campaignFilter, campaignsQuery.data]);
 
   return (
-    <div>
+    <div className="min-w-0">
       <PageHeader
         eyebrow="Drafts"
-        title="All campaign drafts"
-        description="Browse the working copy across campaigns, then narrow the list by campaign, platform, status, or free-text search."
+        title="Draft inventory"
+        description="Filter fast, spot stage at a glance, and jump straight into the draft that needs attention."
         actions={(
-          <Link className="inline-flex items-center rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground" to="/reviews">
-            Open review queue
+          <Link className="inline-flex min-h-11 items-center rounded-[1rem] border border-primary/10 bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-[0_12px_26px_-18px_rgba(15,118,135,0.9)]" to="/reviews">
+            View reviews
           </Link>
         )}
       />
@@ -133,7 +133,7 @@ export function DraftsPage() {
             draftsQuery.data.map((draft) => (
               <Link
                 key={draft.id}
-                className="block rounded-[1.25rem] border border-border bg-white/80 px-4 py-4 transition hover:bg-white"
+                className="block min-w-0 rounded-[1.25rem] border border-border bg-white/80 px-4 py-4 transition hover:bg-white"
                 to={`/drafts/${draft.id}`}
               >
                 <div className="flex flex-wrap items-center gap-3">
