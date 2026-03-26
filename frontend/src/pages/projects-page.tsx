@@ -164,9 +164,16 @@ export function ProjectsPage() {
         }
       />
 
-      <div className="grid gap-6 xl:grid-cols-[0.85fr_1.15fr]">
+      <div className="space-y-6">
         <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
-          <h2 className="text-xl font-semibold tracking-tight">Create project</h2>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Create</p>
+              <h2 className="mt-2 text-2xl font-semibold tracking-tight">Add a new project</h2>
+            </div>
+            <Badge tone="muted">{projectsQuery.data?.length ?? 0} visible</Badge>
+          </div>
+
           <form
             className="mt-5 space-y-4"
             onSubmit={(event) => {
@@ -174,18 +181,38 @@ export function ProjectsPage() {
               createMutation.mutate();
             }}
           >
-            <Field label="Brand">
-              <Select
-                value={createForm.brand_id}
-                onChange={(event) => setCreateForm((current) => ({ ...current, brand_id: event.target.value }))}
-              >
-                {brandsQuery.data?.map((brand) => (
-                  <option key={brand.id} value={brand.id}>
-                    {brand.name}
-                  </option>
-                ))}
-              </Select>
-            </Field>
+            <div className="grid gap-4 md:grid-cols-2">
+              <Field label="Brand">
+                <Select
+                  value={createForm.brand_id}
+                  onChange={(event) => setCreateForm((current) => ({ ...current, brand_id: event.target.value }))}
+                >
+                  {brandsQuery.data?.map((brand) => (
+                    <option key={brand.id} value={brand.id}>
+                      {brand.name}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="Status">
+                <Select
+                  value={createForm.status}
+                  onChange={(event) =>
+                    setCreateForm((current) => ({
+                      ...current,
+                      status: event.target.value as ProjectStatus,
+                    }))
+                  }
+                >
+                  {statusOptions.map((status) => (
+                    <option key={status} value={status}>
+                      {status}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            </div>
+
             <Field label="Project name">
               <Input
                 value={createForm.name}
@@ -200,27 +227,10 @@ export function ProjectsPage() {
                 }
               />
             </Field>
-            <Field label="Status">
-              <Select
-                value={createForm.status}
-                onChange={(event) =>
-                  setCreateForm((current) => ({
-                    ...current,
-                    status: event.target.value as ProjectStatus,
-                  }))
-                }
-              >
-                {statusOptions.map((status) => (
-                  <option key={status} value={status}>
-                    {status}
-                  </option>
-                ))}
-              </Select>
-            </Field>
 
             <MutationFeedback error={createMutation.error} />
             <Button
-              className="w-full"
+              className="w-full sm:w-auto"
               disabled={createMutation.isPending || !brandsQuery.data?.length}
               type="submit"
             >
@@ -229,119 +239,121 @@ export function ProjectsPage() {
           </form>
         </Card>
 
-        <div className="space-y-6">
+        <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Directory</p>
+              <h2 className="mt-2 text-2xl font-semibold tracking-tight">Project list</h2>
+            </div>
+            {selectedProject ? <Badge>{selectedProject.name}</Badge> : null}
+          </div>
+
+          <div className="mt-5 space-y-3">
+            {projectsQuery.data?.length ? (
+              projectsQuery.data.map((project) => (
+                <button
+                  key={project.id}
+                  className={[
+                    "w-full rounded-[1.25rem] border px-4 py-4 text-left transition",
+                    selectedProjectId === project.id
+                      ? "border-primary bg-primary/5"
+                      : "border-border bg-white/80 hover:bg-white",
+                  ].join(" ")}
+                  onClick={() => setSelectedProjectId(project.id)}
+                  type="button"
+                >
+                  <div className="flex flex-wrap items-center gap-3">
+                    <h3 className="text-base font-semibold">{project.name}</h3>
+                    <Badge tone={project.status === "active" ? "success" : "muted"}>{project.status}</Badge>
+                    <Badge tone="muted">{project.campaign_count} campaigns</Badge>
+                  </div>
+                  <p className="mt-2 text-sm text-muted-foreground">{project.brand_name}</p>
+                  <p className="mt-3 text-sm text-muted-foreground">
+                    {project.description ?? "No project description yet."}
+                  </p>
+                </button>
+              ))
+            ) : (
+              <p className="rounded-[1.25rem] border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
+                No projects found for the current filter.
+              </p>
+            )}
+          </div>
+        </Card>
+
+        {selectedProject ? (
           <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="text-xl font-semibold tracking-tight">Project list</h2>
-              <Badge tone="muted">{projectsQuery.data?.length ?? 0} visible</Badge>
-            </div>
-
-            <div className="mt-5 space-y-3">
-              {projectsQuery.data?.length ? (
-                projectsQuery.data.map((project) => (
-                  <button
-                    key={project.id}
-                    className={[
-                      "w-full rounded-[1.25rem] border px-4 py-4 text-left transition",
-                      selectedProjectId === project.id
-                        ? "border-primary bg-primary/5"
-                        : "border-border bg-white/80 hover:bg-white",
-                    ].join(" ")}
-                    onClick={() => setSelectedProjectId(project.id)}
-                    type="button"
-                  >
-                    <div className="flex flex-wrap items-center gap-3">
-                      <h3 className="text-base font-semibold">{project.name}</h3>
-                      <Badge tone={project.status === "active" ? "success" : "muted"}>{project.status}</Badge>
-                    </div>
-                    <p className="mt-2 text-sm text-muted-foreground">{project.brand_name}</p>
-                    <p className="mt-3 text-sm text-muted-foreground">
-                      {project.description ?? "No project description yet."}
-                    </p>
-                    <p className="mt-3 text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                      {project.campaign_count} campaigns
-                    </p>
-                  </button>
-                ))
-              ) : (
-                <p className="rounded-[1.25rem] border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
-                  No projects found for the current filter.
-                </p>
-              )}
-            </div>
-          </Card>
-
-          {selectedProject ? (
-            <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Selected project</p>
-                  <h2 className="mt-2 text-2xl font-semibold tracking-tight">{selectedProject.name}</h2>
-                </div>
-                <Badge>{selectedProject.brand_name}</Badge>
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Selected project</p>
+                <h2 className="mt-2 text-2xl font-semibold tracking-tight">{selectedProject.name}</h2>
+                <p className="mt-2 text-sm text-muted-foreground">{selectedProject.brand_name}</p>
               </div>
+              <Badge tone={selectedProject.status === "active" ? "success" : "muted"}>
+                {selectedProject.status}
+              </Badge>
+            </div>
 
-              <form
-                className="mt-5 space-y-4"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  updateMutation.mutate();
-                }}
-              >
-                <Field label="Project name">
-                  <Input
-                    value={editForm.name}
-                    onChange={(event) => setEditForm((current) => ({ ...current, name: event.target.value }))}
-                  />
-                </Field>
-                <Field label="Description">
-                  <Textarea
-                    value={editForm.description}
-                    onChange={(event) =>
-                      setEditForm((current) => ({ ...current, description: event.target.value }))
-                    }
-                  />
-                </Field>
-                <Field label="Status">
-                  <Select
-                    value={editForm.status}
-                    onChange={(event) =>
-                      setEditForm((current) => ({
-                        ...current,
-                        status: event.target.value as ProjectStatus,
-                      }))
-                    }
-                  >
-                    {statusOptions.map((status) => (
-                      <option key={status} value={status}>
-                        {status}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
+            <form
+              className="mt-5 space-y-4"
+              onSubmit={(event) => {
+                event.preventDefault();
+                updateMutation.mutate();
+              }}
+            >
+              <Field label="Project name">
+                <Input
+                  value={editForm.name}
+                  onChange={(event) => setEditForm((current) => ({ ...current, name: event.target.value }))}
+                />
+              </Field>
+              <Field label="Description">
+                <Textarea
+                  value={editForm.description}
+                  onChange={(event) =>
+                    setEditForm((current) => ({ ...current, description: event.target.value }))
+                  }
+                />
+              </Field>
+              <Field label="Status">
+                <Select
+                  value={editForm.status}
+                  onChange={(event) =>
+                    setEditForm((current) => ({
+                      ...current,
+                      status: event.target.value as ProjectStatus,
+                    }))
+                  }
+                >
+                  {statusOptions.map((status) => (
+                    <option key={status} value={status}>
+                      {status}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
 
-                <MutationFeedback error={updateMutation.error || deleteMutation.error} />
-                <div className="flex flex-wrap gap-3">
-                  <Button disabled={updateMutation.isPending} type="submit">
-                    {updateMutation.isPending ? "Saving..." : "Save changes"}
-                  </Button>
-                  <Button
-                    disabled={deleteMutation.isPending}
-                    onClick={() => {
-                      if (window.confirm(`Delete ${selectedProject.name}?`)) {
-                        deleteMutation.mutate();
-                      }
-                    }}
-                    type="button"
-                    variant="danger"
-                  >
-                    {deleteMutation.isPending ? "Deleting..." : "Delete project"}
-                  </Button>
-                </div>
-              </form>
-            </Card>
-          ) : null}
-        </div>
+              <MutationFeedback error={updateMutation.error || deleteMutation.error} />
+              <div className="flex flex-wrap gap-3">
+                <Button disabled={updateMutation.isPending} type="submit">
+                  {updateMutation.isPending ? "Saving..." : "Save changes"}
+                </Button>
+                <Button
+                  disabled={deleteMutation.isPending}
+                  onClick={() => {
+                    if (window.confirm(`Delete ${selectedProject.name}?`)) {
+                      deleteMutation.mutate();
+                    }
+                  }}
+                  type="button"
+                  variant="danger"
+                >
+                  {deleteMutation.isPending ? "Deleting..." : "Delete project"}
+                </Button>
+              </div>
+            </form>
+          </Card>
+        ) : null}
       </div>
     </div>
   );
