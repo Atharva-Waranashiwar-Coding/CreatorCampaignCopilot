@@ -57,3 +57,7 @@ class User(TimestampMixin, Base):
         foreign_keys="Notification.actor_user_id",
     )
     tool_usage_logs: Mapped[list["ToolUsageLog"]] = relationship(back_populates="actor", lazy="selectin")
+    helper_artifacts: Mapped[list["DraftHelperArtifact"]] = relationship(
+        back_populates="creator",
+        lazy="selectin",
+    )

@@ -35,3 +35,7 @@ class ToolUsageLog(Base):
 
     actor: Mapped["User"] = relationship(foreign_keys=[actor_user_id], back_populates="tool_usage_logs")
     brand: Mapped["Brand | None"] = relationship(back_populates="tool_usage_logs")
+    helper_artifacts: Mapped[list["DraftHelperArtifact"]] = relationship(
+        back_populates="source_tool_usage_log",
+        lazy="selectin",
+    )

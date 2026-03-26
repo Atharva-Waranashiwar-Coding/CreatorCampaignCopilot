@@ -16,6 +16,7 @@ from app.models.calendar_item import CalendarItem
 from app.models.campaign import Campaign
 from app.models.content_draft import ContentDraft
 from app.models.content_template import ContentTemplate
+from app.models.draft_helper_artifact import DraftHelperArtifact
 from app.models.draft_review import DraftReview
 from app.models.plan import Plan
 from app.models.project import Project
@@ -290,6 +291,13 @@ def compute_brand_usage_counts(db: Session, *, brand_id: int) -> dict[str, int]:
             ToolUsageLog.tool_name.in_(ADVANCED_HELPER_TOOL_NAMES),
         )
     ) or 0
+    saved_helper_artifacts = db.scalar(
+        select(func.count(DraftHelperArtifact.id))
+        .join(ContentDraft, ContentDraft.id == DraftHelperArtifact.draft_id)
+        .join(Campaign, Campaign.id == ContentDraft.campaign_id)
+        .join(Project, Project.id == Campaign.project_id)
+        .where(Project.brand_id == brand_id)
+    ) or 0
 
     return {
         "members": members,
@@ -299,6 +307,7 @@ def compute_brand_usage_counts(db: Session, *, brand_id: int) -> dict[str, int]:
         "monthly_review_actions": monthly_review_actions,
         "monthly_helper_runs": monthly_helper_runs,
         "monthly_advanced_helper_runs": monthly_advanced_helper_runs,
+        "saved_helper_artifacts": saved_helper_artifacts,
     }
 
 

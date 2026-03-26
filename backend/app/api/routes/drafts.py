@@ -7,6 +7,11 @@ from app.models.user import User
 from app.schemas.assignment import AssignmentCreate, AssignmentRead
 from app.schemas.collaboration_comment import CollaborationCommentCreate, CollaborationCommentRead
 from app.schemas.content_draft import ContentDraftCreate, ContentDraftRead, ContentDraftStageMove, ContentDraftUpdate
+from app.schemas.draft_helper_artifact import (
+    DraftHelperArtifactCreate,
+    DraftHelperArtifactRead,
+    DraftHelperArtifactUpdate,
+)
 from app.schemas.draft_version import DraftVersionRead
 from app.schemas.draft_review import (
     DraftReviewCreate,
@@ -16,6 +21,12 @@ from app.schemas.draft_review import (
 )
 from app.services.assignments import create_draft_assignment, list_draft_assignments
 from app.services.drafts import create_draft, delete_draft, get_draft, list_draft_versions, list_drafts, update_draft
+from app.services.helper_artifacts import (
+    create_draft_helper_artifact,
+    delete_draft_helper_artifact,
+    list_draft_helper_artifacts,
+    update_draft_helper_artifact,
+)
 from app.services.comments import create_draft_comment, list_draft_comments
 from app.services.reviews import (
     add_review_comment,
@@ -155,6 +166,65 @@ def read_draft_versions(
         return list_draft_versions(db, draft_id=draft_id, user=current_user)
     except Exception as exc:
         _raise_service_error(exc)
+
+
+@router.get("/{draft_id}/helper-artifacts", response_model=list[DraftHelperArtifactRead])
+def read_draft_helper_artifacts(
+    draft_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[DraftHelperArtifactRead]:
+    try:
+        return list_draft_helper_artifacts(db, draft_id=draft_id, user=current_user)
+    except Exception as exc:
+        _raise_service_error(exc)
+
+
+@router.post("/{draft_id}/helper-artifacts", response_model=DraftHelperArtifactRead, status_code=status.HTTP_201_CREATED)
+def create_draft_helper_artifact_route(
+    draft_id: int,
+    payload: DraftHelperArtifactCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> DraftHelperArtifactRead:
+    try:
+        return create_draft_helper_artifact(db, draft_id=draft_id, payload=payload, user=current_user)
+    except Exception as exc:
+        _raise_service_error(exc)
+
+
+@router.patch("/{draft_id}/helper-artifacts/{artifact_id}", response_model=DraftHelperArtifactRead)
+def update_draft_helper_artifact_route(
+    draft_id: int,
+    artifact_id: int,
+    payload: DraftHelperArtifactUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> DraftHelperArtifactRead:
+    try:
+        return update_draft_helper_artifact(
+            db,
+            draft_id=draft_id,
+            artifact_id=artifact_id,
+            payload=payload,
+            user=current_user,
+        )
+    except Exception as exc:
+        _raise_service_error(exc)
+
+
+@router.delete("/{draft_id}/helper-artifacts/{artifact_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_draft_helper_artifact_route(
+    draft_id: int,
+    artifact_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Response:
+    try:
+        delete_draft_helper_artifact(db, draft_id=draft_id, artifact_id=artifact_id, user=current_user)
+    except Exception as exc:
+        _raise_service_error(exc)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/{draft_id}/reviews", response_model=DraftReviewRead, status_code=status.HTTP_201_CREATED)
