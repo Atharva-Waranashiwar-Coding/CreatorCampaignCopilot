@@ -339,11 +339,32 @@ function HealthSummaryCard({
         <p className="mt-6 text-sm text-muted-foreground">Loading campaign health...</p>
       ) : (
         <div className="mt-6">
-          <div className="flex items-end gap-4">
-            <p className="text-5xl font-semibold tracking-tight">{Math.round(averageScore)}</p>
-            <Badge tone={healthTone(averageScore >= 85 ? "healthy" : averageScore >= 70 ? "watch" : averageScore >= 50 ? "at_risk" : "critical")}>
-              average score
-            </Badge>
+          <div className="grid gap-6 lg:grid-cols-[220px_1fr]">
+            <ScoreGauge
+              label="Average health"
+              tone={healthTone(averageScore >= 85 ? "healthy" : averageScore >= 70 ? "watch" : averageScore >= 50 ? "at_risk" : "critical")}
+              value={averageScore}
+            />
+
+            <div>
+              <div className="flex flex-wrap items-center gap-3">
+                <p className="text-5xl font-semibold tracking-tight">{Math.round(averageScore)}</p>
+                <Badge tone={healthTone(averageScore >= 85 ? "healthy" : averageScore >= 70 ? "watch" : averageScore >= 50 ? "at_risk" : "critical")}>
+                  average score
+                </Badge>
+              </div>
+
+              <p className="mt-4 text-sm leading-6 text-muted-foreground">
+                Health distribution gives a faster read on whether the portfolio is clustered in healthy execution or getting pulled toward watch, risk, and critical states.
+              </p>
+
+              <HealthDistributionBar
+                atRiskCount={atRiskCount}
+                criticalCount={criticalCount}
+                healthyCount={healthyCount}
+                watchCount={watchCount}
+              />
+            </div>
           </div>
 
           <div className="mt-6 grid gap-3 md:grid-cols-2 2xl:grid-cols-4">
@@ -458,6 +479,8 @@ function MemberLoadCard({
   subtitle: string;
   title: string;
 }) {
+  const maxCount = Math.max(...items.map((item) => item.count), 0);
+
   return (
     <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
       <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">{eyebrow}</p>
@@ -477,7 +500,10 @@ function MemberLoadCard({
                 </div>
                 <Badge tone="muted">{item.count} open</Badge>
               </div>
-              <div className="mt-3 flex flex-wrap gap-2">
+              <div className="mt-4">
+                <MemberLoadBar item={item} maxCount={maxCount} />
+              </div>
+              <div className="mt-4 flex flex-wrap gap-2">
                 <Badge tone={item.overdue_count ? "warning" : "muted"}>{item.overdue_count} overdue</Badge>
                 <Badge tone={item.due_soon_count ? "warning" : "muted"}>{item.due_soon_count} due soon</Badge>
               </div>
@@ -498,6 +524,8 @@ function BottleneckCard({
   items: DashboardAnalytics["workload"]["bottlenecks_by_status"];
   isLoading: boolean;
 }) {
+  const maxCount = Math.max(...items.map((item) => item.count), 0);
+
   return (
     <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
       <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Bottlenecks</p>
@@ -512,11 +540,16 @@ function BottleneckCard({
         <div className="mt-6 space-y-3">
           {items.map((item) => (
             <div key={item.status} className="rounded-[1.25rem] border border-border bg-white/80 px-4 py-4">
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <p className="text-sm font-semibold text-foreground">{item.label}</p>
-                <Badge tone="muted">{item.count}</Badge>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge tone="muted">{item.count} total</Badge>
+                  <Badge tone={item.stale_count ? "warning" : "muted"}>{item.stale_count} stale</Badge>
+                </div>
               </div>
-              <p className="mt-2 text-sm text-muted-foreground">{item.stale_count} stale in this status</p>
+              <div className="mt-4">
+                <BottleneckBar item={item} maxCount={maxCount} />
+              </div>
             </div>
           ))}
         </div>
@@ -534,6 +567,12 @@ function ApprovalInsightsCard({
   approvals: DashboardAnalytics["approvals"] | undefined;
   isLoading: boolean;
 }) {
+  const maxTime = Math.max(
+    approvals?.average_review_time_hours ?? 0,
+    approvals?.average_approval_time_hours ?? 0,
+    24,
+  );
+
   return (
     <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
       <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Approval analytics</p>
@@ -545,11 +584,31 @@ function ApprovalInsightsCard({
       {isLoading ? (
         <p className="mt-6 text-sm text-muted-foreground">Loading approval analytics...</p>
       ) : (
-        <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <StatCard label="Avg review time" value={`${approvals?.average_review_time_hours ?? 0}h`} />
-          <StatCard label="Avg approval time" value={`${approvals?.average_approval_time_hours ?? 0}h`} />
-          <StatCard label="Rejection rate" value={`${approvals?.rejection_rate ?? 0}%`} />
-          <StatCard label="Decisions" value={approvals?.decision_count ?? 0} />
+        <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <InsightMeterCard
+            accentClassName="bg-[linear-gradient(90deg,rgba(12,86,102,0.95),rgba(26,132,153,0.85))]"
+            label="Avg review time"
+            progress={buildProgress(approvals?.average_review_time_hours ?? 0, maxTime)}
+            value={`${approvals?.average_review_time_hours ?? 0}h`}
+          />
+          <InsightMeterCard
+            accentClassName="bg-[linear-gradient(90deg,rgba(27,94,32,0.92),rgba(74,222,128,0.78))]"
+            label="Avg approval time"
+            progress={buildProgress(approvals?.average_approval_time_hours ?? 0, maxTime)}
+            value={`${approvals?.average_approval_time_hours ?? 0}h`}
+          />
+          <InsightMeterCard
+            accentClassName="bg-[linear-gradient(90deg,rgba(191,87,0,0.9),rgba(245,158,11,0.85))]"
+            label="Rejection rate"
+            progress={Math.min(approvals?.rejection_rate ?? 0, 100)}
+            value={`${approvals?.rejection_rate ?? 0}%`}
+          />
+          <InsightMeterCard
+            accentClassName="bg-[linear-gradient(90deg,rgba(67,56,202,0.9),rgba(96,165,250,0.8))]"
+            label="Decisions"
+            progress={buildProgress(approvals?.decision_count ?? 0, Math.max(approvals?.decision_count ?? 0, 12))}
+            value={approvals?.decision_count ?? 0}
+          />
         </div>
       )}
     </Card>
@@ -591,6 +650,17 @@ function RevisionCyclesCard({
                 <Badge tone={draft.rejection_count ? "warning" : "muted"}>
                   {draft.revision_cycle_count} cycles · {draft.rejection_count} rejections
                 </Badge>
+              </div>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {buildCycleDots(draft.revision_cycle_count).map((dot, index) => (
+                  <span
+                    key={`${draft.draft_id}-dot-${index}`}
+                    className={[
+                      "h-3 w-3 rounded-full",
+                      dot ? "bg-primary shadow-sm shadow-primary/30" : "bg-slate-200",
+                    ].join(" ")}
+                  />
+                ))}
               </div>
               <p className="mt-3 text-sm text-muted-foreground">
                 Current status: {formatStatusLabel(draft.status, draft.status_label)}
@@ -727,29 +797,218 @@ function TimelineCard({
       {isLoading ? (
         <p className="mt-6 text-sm text-muted-foreground">Loading schedule analytics...</p>
       ) : buckets.length ? (
-        <div className="mt-6 space-y-4">
-          {buckets.map((bucket) => (
-            <div key={bucket.date}>
-              <div className="flex items-center justify-between gap-3 text-sm">
-                <span>{formatDate(bucket.date)}</span>
-                <span className="font-medium text-foreground">{bucket.count}</span>
+        <div className="mt-6">
+          <div className="flex min-h-[220px] items-end gap-3 rounded-[1.4rem] border border-border bg-white/70 px-4 py-5">
+            {buckets.map((bucket) => (
+              <div key={bucket.date} className="flex min-w-0 flex-1 flex-col items-center justify-end gap-3">
+                <div className="text-xs font-semibold text-foreground">{bucket.count}</div>
+                <div className="flex h-36 w-full items-end">
+                  <div
+                    className="w-full rounded-t-[1rem] bg-[linear-gradient(180deg,rgba(251,191,36,0.95),rgba(191,87,0,0.9))] shadow-[0_16px_28px_-22px_rgba(191,87,0,0.8)]"
+                    style={{
+                      height: `${maxCount ? Math.max((bucket.count / maxCount) * 100, bucket.count ? 10 : 0) : 0}%`,
+                    }}
+                  />
+                </div>
+                <div className="text-center text-[0.68rem] uppercase tracking-[0.16em] text-muted-foreground">
+                  {formatTimelineLabel(bucket.date)}
+                </div>
               </div>
-              <div className="mt-2 h-2 rounded-full bg-slate-200/80">
-                <div
-                  className="h-full rounded-full bg-[linear-gradient(90deg,rgba(191,87,0,0.9),rgba(245,158,11,0.85))]"
-                  style={{
-                    width: `${maxCount ? Math.max((bucket.count / maxCount) * 100, bucket.count ? 8 : 0) : 0}%`,
-                  }}
-                />
-              </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       ) : (
         <p className="mt-6 text-sm text-muted-foreground">No scheduled items are currently queued in the next two weeks.</p>
       )}
     </Card>
   );
+}
+
+function ScoreGauge({
+  label,
+  tone,
+  value,
+}: {
+  label: string;
+  tone: "success" | "warning" | "muted";
+  value: number;
+}) {
+  const normalized = Math.max(0, Math.min(Math.round(value), 100));
+  const radius = 56;
+  const circumference = 2 * Math.PI * radius;
+  const dashOffset = circumference - (normalized / 100) * circumference;
+  const strokeClassName =
+    tone === "success"
+      ? "stroke-emerald-500"
+      : tone === "warning"
+        ? "stroke-amber-500"
+        : "stroke-slate-500";
+
+  return (
+    <div className="flex flex-col items-center justify-center rounded-[1.5rem] border border-border bg-white/80 px-4 py-5">
+      <div className="relative h-36 w-36">
+        <svg className="-rotate-90" height="144" width="144">
+          <circle className="fill-none stroke-slate-200" cx="72" cy="72" r={radius} strokeWidth="12" />
+          <circle
+            className={`fill-none ${strokeClassName}`}
+            cx="72"
+            cy="72"
+            r={radius}
+            strokeDasharray={circumference}
+            strokeDashoffset={dashOffset}
+            strokeLinecap="round"
+            strokeWidth="12"
+          />
+        </svg>
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <p className="text-4xl font-semibold tracking-tight">{normalized}</p>
+          <p className="mt-1 text-[0.68rem] uppercase tracking-[0.18em] text-muted-foreground">score</p>
+        </div>
+      </div>
+      <p className="mt-3 text-sm font-semibold text-foreground">{label}</p>
+    </div>
+  );
+}
+
+function HealthDistributionBar({
+  healthyCount,
+  watchCount,
+  atRiskCount,
+  criticalCount,
+}: {
+  healthyCount: number;
+  watchCount: number;
+  atRiskCount: number;
+  criticalCount: number;
+}) {
+  const total = healthyCount + watchCount + atRiskCount + criticalCount;
+  const segments = [
+    { label: "Healthy", value: healthyCount, className: "bg-emerald-500" },
+    { label: "Watch", value: watchCount, className: "bg-amber-300" },
+    { label: "At risk", value: atRiskCount, className: "bg-amber-500" },
+    { label: "Critical", value: criticalCount, className: "bg-rose-500" },
+  ];
+
+  return (
+    <div className="mt-6">
+      <div className="h-4 overflow-hidden rounded-full bg-slate-200/80">
+        <div className="flex h-full w-full">
+          {segments.map((segment) => (
+            <div
+              key={segment.label}
+              className={segment.className}
+              style={{ width: `${total ? (segment.value / total) * 100 : 0}%` }}
+            />
+          ))}
+        </div>
+      </div>
+      <div className="mt-4 flex flex-wrap gap-3">
+        {segments.map((segment) => (
+          <div key={segment.label} className="flex items-center gap-2 text-sm text-muted-foreground">
+            <span className={`h-3 w-3 rounded-full ${segment.className}`} />
+            <span>{segment.label}</span>
+            <span className="font-semibold text-foreground">{segment.value}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MemberLoadBar({
+  item,
+  maxCount,
+}: {
+  item: DashboardMemberBucket;
+  maxCount: number;
+}) {
+  const activeWidth = maxCount ? Math.max((item.count / maxCount) * 100, item.count ? 8 : 0) : 0;
+  const safeCount = item.count || 1;
+  const overdueWidth = (item.overdue_count / safeCount) * 100;
+  const dueSoonWidth = (item.due_soon_count / safeCount) * 100;
+  const plannedWidth = Math.max(100 - overdueWidth - dueSoonWidth, 0);
+
+  return (
+    <div>
+      <div className="h-3 overflow-hidden rounded-full bg-slate-200/80">
+        <div className="flex h-full" style={{ width: `${activeWidth}%` }}>
+          <div className="bg-rose-500" style={{ width: `${overdueWidth}%` }} />
+          <div className="bg-amber-400" style={{ width: `${dueSoonWidth}%` }} />
+          <div className="bg-primary/80" style={{ width: `${plannedWidth}%` }} />
+        </div>
+      </div>
+      <div className="mt-2 flex flex-wrap gap-3 text-[0.7rem] uppercase tracking-[0.14em] text-muted-foreground">
+        <span>Overdue</span>
+        <span>Due soon</span>
+        <span>Planned</span>
+      </div>
+    </div>
+  );
+}
+
+function BottleneckBar({
+  item,
+  maxCount,
+}: {
+  item: DashboardAnalytics["workload"]["bottlenecks_by_status"][number];
+  maxCount: number;
+}) {
+  const totalWidth = maxCount ? Math.max((item.count / maxCount) * 100, item.count ? 8 : 0) : 0;
+  const staleWidth = item.count ? (item.stale_count / item.count) * totalWidth : 0;
+
+  return (
+    <div>
+      <div className="h-3 overflow-hidden rounded-full bg-slate-200/80">
+        <div className="relative h-full rounded-full bg-primary/20" style={{ width: `${totalWidth}%` }}>
+          <div className="absolute inset-y-0 left-0 rounded-full bg-primary" style={{ width: `${Math.max(totalWidth - staleWidth, 0)}%` }} />
+          <div className="absolute inset-y-0 right-0 rounded-full bg-amber-500" style={{ width: `${staleWidth}%` }} />
+        </div>
+      </div>
+      <p className="mt-2 text-sm text-muted-foreground">{item.stale_count} stale in this status</p>
+    </div>
+  );
+}
+
+function InsightMeterCard({
+  accentClassName,
+  label,
+  progress,
+  value,
+}: {
+  accentClassName: string;
+  label: string;
+  progress: number;
+  value: number | string;
+}) {
+  return (
+    <div className="rounded-[1.2rem] border border-border bg-white/80 px-4 py-4">
+      <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">{label}</p>
+      <p className="mt-3 text-2xl font-semibold tracking-tight">{value}</p>
+      <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-200/80">
+        <div className={`h-full rounded-full ${accentClassName}`} style={{ width: `${Math.max(progress, 6)}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function buildCycleDots(value: number) {
+  const visibleDots = Math.min(Math.max(value, 0), 6);
+  return Array.from({ length: 6 }, (_, index) => index < visibleDots);
+}
+
+function buildProgress(value: number, maxValue: number) {
+  if (!maxValue) {
+    return 0;
+  }
+  return Math.min((value / maxValue) * 100, 100);
+}
+
+function formatTimelineLabel(value: string) {
+  const date = new Date(value);
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+  }).format(date);
 }
 
 function buildDashboardPath(basePath: string, brandFilter: string, extraParams?: Record<string, string>) {
