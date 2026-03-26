@@ -27,6 +27,12 @@ export const navigationSections: NavigationSection[] = [
         hint: "Unread updates, due soon work, and alerts.",
         sectionLabel: "Overview",
       },
+      {
+        label: "Calendar",
+        to: "/calendar",
+        hint: "Upcoming scheduled content and launch timing.",
+        sectionLabel: "Overview",
+      },
     ],
   },
   {
@@ -50,12 +56,6 @@ export const navigationSections: NavigationSection[] = [
         hint: "Execution lanes, briefs, and launch timelines.",
         sectionLabel: "Workspace",
         matchPrefixes: ["/campaigns/"],
-      },
-      {
-        label: "Calendar",
-        to: "/calendar",
-        hint: "Upcoming scheduled content and launch timing.",
-        sectionLabel: "Workspace",
       },
     ],
   },
