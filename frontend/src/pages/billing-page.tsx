@@ -107,14 +107,17 @@ export function BillingPage() {
         )}
       />
 
-      <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
+      <div className="space-y-6">
         <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Current plan</p>
+              <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Selected plan</p>
               <h2 className="mt-2 text-3xl font-semibold tracking-tight">
                 {snapshot?.current_plan.name ?? "Loading..."}
               </h2>
+              <p className="mt-3 max-w-3xl text-sm leading-6 text-muted-foreground">
+                {snapshot?.current_plan.description ?? "Loading billing state for the selected brand."}
+              </p>
             </div>
             {snapshot ? <Badge>{snapshot.current_user_role}</Badge> : null}
           </div>
@@ -123,19 +126,36 @@ export function BillingPage() {
             <p className="mt-6 text-sm text-muted-foreground">Loading billing state...</p>
           ) : snapshot ? (
             <div className="mt-6 space-y-5">
-              <div className="rounded-[1.5rem] border border-border bg-white/80 p-5">
-                <p className="text-sm text-muted-foreground">
-                  {snapshot.current_plan.description ?? "No plan description available."}
-                </p>
-                <p className="mt-4 text-4xl font-semibold tracking-tight">
-                  {formatPlanPrice(snapshot.current_plan, billingInterval)}
-                </p>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  Status: <span className="font-medium capitalize text-foreground">{snapshot.subscription.status.replace(/_/g, " ")}</span>
-                </p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Current period ends {formatDate(snapshot.subscription.current_period_end)}
-                </p>
+              <div className="grid gap-4 md:grid-cols-[1.2fr_0.8fr]">
+                <div className="rounded-[1.5rem] border border-border bg-white/80 p-5">
+                  <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">Plan price</p>
+                  <p className="mt-4 text-4xl font-semibold tracking-tight">
+                    {formatPlanPrice(snapshot.current_plan, billingInterval)}
+                  </p>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <Badge tone="muted">{snapshot.subscription.billing_interval}</Badge>
+                    <Badge tone="muted">{snapshot.subscription.status.replace(/_/g, " ")}</Badge>
+                    {snapshot.subscription.cancel_at_period_end ? <Badge tone="warning">Cancels at period end</Badge> : null}
+                  </div>
+                  <p className="mt-4 text-sm text-muted-foreground">
+                    Current period ends {formatDate(snapshot.subscription.current_period_end)}
+                  </p>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-3 md:grid-cols-1">
+                  <PlanSummaryChip
+                    label="Usage meters"
+                    value={snapshot.usage.length}
+                  />
+                  <PlanSummaryChip
+                    label="Enabled features"
+                    value={snapshot.features.filter((feature) => feature.enabled).length}
+                  />
+                  <PlanSummaryChip
+                    label="Upgrade prompts"
+                    value={snapshot.upgrade_prompts.length}
+                  />
+                </div>
               </div>
 
               <div className="space-y-3">
@@ -158,105 +178,120 @@ export function BillingPage() {
                   </p>
                 )}
               </div>
-
-              <div className="space-y-3">
-                <h3 className="text-lg font-semibold tracking-tight">Recent plan activity</h3>
-                {snapshot.recent_plan_activity.length ? (
-                  snapshot.recent_plan_activity.map((item) => (
-                    <div
-                      key={item.id}
-                      className="rounded-[1.25rem] border border-border bg-white/80 px-4 py-4"
-                    >
-                      <div className="flex flex-wrap items-center gap-3">
-                        <Badge>{item.entity_type}</Badge>
-                        <p className="text-sm font-medium capitalize text-foreground">
-                          {item.action.replace(/[._]/g, " ")}
-                        </p>
-                      </div>
-                      <p className="mt-2 text-sm text-muted-foreground">
-                        {item.actor_name ?? "Unknown user"} · {formatDateTime(item.created_at)}
-                      </p>
-                    </div>
-                  ))
-                ) : (
-                  <p className="rounded-[1.25rem] border border-border bg-white/80 px-4 py-4 text-sm text-muted-foreground">
-                    Plan changes will be logged here as the subscription state changes.
-                  </p>
-                )}
-              </div>
             </div>
           ) : null}
         </Card>
 
-        <div className="space-y-6">
-          <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Usage</p>
-                <h2 className="mt-2 text-2xl font-semibold tracking-tight">Live plan consumption</h2>
-              </div>
-              {snapshot ? <Badge tone="muted">{snapshot.usage.length} meters</Badge> : null}
+        <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Plans</p>
+              <h2 className="mt-2 text-2xl font-semibold tracking-tight">Upgrade or rebalance capacity</h2>
             </div>
+            {!canManagePlan && snapshot ? <Badge tone="warning">Read only</Badge> : null}
+          </div>
 
-            {billingQuery.isLoading ? (
-              <p className="mt-6 text-sm text-muted-foreground">Loading usage metrics...</p>
-            ) : (
-              <div className="mt-6 grid gap-4 md:grid-cols-2">
-                {snapshot?.usage.map((metric) => (
-                  <UsageMeterCard key={metric.key} metric={metric} />
-                ))}
-              </div>
-            )}
-          </Card>
+          <div className="mt-6 grid gap-4 xl:grid-cols-3">
+            {snapshot?.available_plans.map((plan) => (
+              <PlanCard
+                key={plan.code}
+                billingInterval={billingInterval}
+                canManagePlan={Boolean(canManagePlan)}
+                currentPlanCode={snapshot.current_plan.code}
+                onSelect={(planCode) => planMutation.mutate(planCode)}
+                plan={plan}
+                saving={planMutation.isPending}
+              />
+            ))}
+          </div>
 
-          <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Features</p>
-                <h2 className="mt-2 text-2xl font-semibold tracking-tight">What the plan unlocks</h2>
-              </div>
+          <div className="mt-5">
+            <MutationFeedback error={planMutation.error} />
+          </div>
+        </Card>
+
+        <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Usage</p>
+              <h2 className="mt-2 text-2xl font-semibold tracking-tight">Live plan consumption</h2>
             </div>
+            {snapshot ? <Badge tone="muted">{snapshot.usage.length} meters</Badge> : null}
+          </div>
 
-            {billingQuery.isLoading ? (
-              <p className="mt-6 text-sm text-muted-foreground">Loading feature access...</p>
-            ) : (
-              <div className="mt-6 space-y-3">
-                {snapshot?.features.map((feature) => (
-                  <FeatureRow key={feature.key} feature={feature} />
-                ))}
-              </div>
-            )}
-          </Card>
-
-          <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Plans</p>
-                <h2 className="mt-2 text-2xl font-semibold tracking-tight">Upgrade or rebalance capacity</h2>
-              </div>
-              {!canManagePlan && snapshot ? <Badge tone="warning">Read only</Badge> : null}
-            </div>
-
-            <div className="mt-6 grid gap-4 xl:grid-cols-3">
-              {snapshot?.available_plans.map((plan) => (
-                <PlanCard
-                  key={plan.code}
-                  billingInterval={billingInterval}
-                  canManagePlan={Boolean(canManagePlan)}
-                  currentPlanCode={snapshot.current_plan.code}
-                  onSelect={(planCode) => planMutation.mutate(planCode)}
-                  plan={plan}
-                  saving={planMutation.isPending}
-                />
+          {billingQuery.isLoading ? (
+            <p className="mt-6 text-sm text-muted-foreground">Loading usage metrics...</p>
+          ) : (
+            <div className="mt-6 grid gap-4 md:grid-cols-2">
+              {snapshot?.usage.map((metric) => (
+                <UsageMeterCard key={metric.key} metric={metric} />
               ))}
             </div>
+          )}
+        </Card>
 
-            <div className="mt-5">
-              <MutationFeedback error={planMutation.error} />
+        <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Features</p>
+              <h2 className="mt-2 text-2xl font-semibold tracking-tight">What the plan unlocks</h2>
             </div>
-          </Card>
-        </div>
+          </div>
+
+          {billingQuery.isLoading ? (
+            <p className="mt-6 text-sm text-muted-foreground">Loading feature access...</p>
+          ) : (
+            <div className="mt-6 space-y-3">
+              {snapshot?.features.map((feature) => (
+                <FeatureRow key={feature.key} feature={feature} />
+              ))}
+            </div>
+          )}
+        </Card>
+
+        <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Recent activity</p>
+              <h2 className="mt-2 text-2xl font-semibold tracking-tight">Plan changes and subscription events</h2>
+            </div>
+          </div>
+
+          <div className="mt-5 space-y-3">
+            {snapshot?.recent_plan_activity.length ? (
+              snapshot.recent_plan_activity.map((item) => (
+                <div
+                  key={item.id}
+                  className="rounded-[1.25rem] border border-border bg-white/80 px-4 py-4"
+                >
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Badge>{item.entity_type}</Badge>
+                    <p className="text-sm font-medium capitalize text-foreground">
+                      {item.action.replace(/[._]/g, " ")}
+                    </p>
+                  </div>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    {item.actor_name ?? "Unknown user"} · {formatDateTime(item.created_at)}
+                  </p>
+                </div>
+              ))
+            ) : (
+              <p className="rounded-[1.25rem] border border-border bg-white/80 px-4 py-4 text-sm text-muted-foreground">
+                Plan changes will be logged here as the subscription state changes.
+              </p>
+            )}
+          </div>
+        </Card>
       </div>
+    </div>
+  );
+}
+
+function PlanSummaryChip({ label, value }: { label: string; value: number | string }) {
+  return (
+    <div className="rounded-[1.25rem] border border-border bg-white/80 px-4 py-4">
+      <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">{label}</p>
+      <p className="mt-3 text-2xl font-semibold tracking-tight">{value}</p>
     </div>
   );
 }
