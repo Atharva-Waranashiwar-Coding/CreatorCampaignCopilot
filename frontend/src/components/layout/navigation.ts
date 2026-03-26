@@ -89,7 +89,7 @@ export const navigationSections: NavigationSection[] = [
       {
         label: "AI Assist",
         to: "/tools",
-        hint: "Helper tools, suggestions, and MCP activity.",
+        hint: "Capabilities, access, and where helpers actually run.",
         sectionLabel: "Intelligence",
       },
       {
