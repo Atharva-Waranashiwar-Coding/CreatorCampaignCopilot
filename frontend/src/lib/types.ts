@@ -29,6 +29,17 @@ export type DraftReviewAction =
   | "resubmitted";
 export type PlanInterval = "monthly" | "yearly";
 export type SubscriptionStatus = "trialing" | "active" | "past_due" | "canceled";
+export type HelperArtifactStatus = "saved" | "applied" | "dismissed";
+export type HelperArtifactType =
+  | "brand_guidelines"
+  | "template_snapshot"
+  | "validation_report"
+  | "review_summary"
+  | "voice_validation"
+  | "cross_channel_adaptation"
+  | "template_recommendations"
+  | "asset_recommendations"
+  | "revision_checklist";
 export type NotificationType =
   | "mention"
   | "review_requested"
@@ -630,6 +641,112 @@ export type ValidationCheck = {
   detail: string;
 };
 
+export type BrandGuidelinesResponse = {
+  brand_id: number;
+  brand_name: string;
+  slug: string;
+  current_user_role: BrandRole;
+  industry: string | null;
+  description: string | null;
+  tone_of_voice: string | null;
+  target_audience: string | null;
+  preferred_channels: string[];
+  guidelines_summary: string | null;
+  project_count: number;
+  campaign_count: number;
+  guidance_points: string[];
+};
+
+export type TemplateSummary = {
+  id: number;
+  brand_id: number;
+  brand_name: string;
+  name: string;
+  description: string | null;
+  template_type: string;
+  platform: string | null;
+  content_type: string | null;
+  excerpt: string;
+  updated_at: string;
+};
+
+export type FetchTemplatesResponse = {
+  filters: {
+    brand_id: number | null;
+    template_type: string | null;
+    platform: string | null;
+    content_type: string | null;
+    search: string | null;
+    limit: number;
+  };
+  total: number;
+  returned: number;
+  templates: TemplateSummary[];
+};
+
+export type ValidateContentAgainstGuidelinesResponse = {
+  brand_id: number;
+  brand_name: string;
+  template_id: number | null;
+  template_name: string | null;
+  score: number;
+  passed: boolean;
+  summary: string;
+  matched_keywords: string[];
+  missing_keywords: string[];
+  checks: ValidationCheck[];
+};
+
+export type CampaignAssetSummary = {
+  id: number;
+  name: string;
+  asset_type: string;
+  file_url: string;
+  thumbnail_url: string | null;
+  mime_type: string | null;
+  file_size_bytes: number | null;
+  notes: string | null;
+  updated_at: string;
+};
+
+export type RetrieveCampaignAssetsResponse = {
+  campaign_id: number;
+  campaign_name: string;
+  brand_id: number;
+  brand_name: string;
+  returned: number;
+  assets: CampaignAssetSummary[];
+};
+
+export type ReviewActionCount = {
+  action: DraftReviewAction;
+  count: number;
+};
+
+export type ReviewCommentSummary = {
+  actor_name: string | null;
+  action: DraftReviewAction;
+  comment: string;
+  created_at: string;
+};
+
+export type SummarizeReviewFeedbackResponse = {
+  draft_id: number;
+  draft_title: string;
+  brand_id: number;
+  brand_name: string;
+  current_status: string;
+  current_status_label: string;
+  current_user_role: BrandRole;
+  review_count: number;
+  latest_action: DraftReviewAction | null;
+  summary: string;
+  blockers: string[];
+  approvals: string[];
+  action_counts: ReviewActionCount[];
+  recent_comments: ReviewCommentSummary[];
+};
+
 export type AdvancedToolContext = {
   draft_id: number | null;
   brand_id: number;
@@ -739,6 +856,23 @@ export type ToolUsageLog = {
   request_trace: Record<string, unknown> | null;
   result_trace: Record<string, unknown> | null;
   created_at: string;
+};
+
+export type DraftHelperArtifact = {
+  id: number;
+  draft_id: number;
+  tool_name: string;
+  artifact_type: HelperArtifactType;
+  title: string;
+  summary: string | null;
+  payload: Record<string, unknown>;
+  status: HelperArtifactStatus;
+  source_tool_usage_log_id: number | null;
+  source_tool_created_at: string | null;
+  created_by: number;
+  creator_name: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 export type Notification = {

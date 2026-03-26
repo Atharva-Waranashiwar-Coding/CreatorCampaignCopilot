@@ -6,6 +6,7 @@ import { Link, useParams } from "react-router-dom";
 import { CampaignPlanner } from "../components/campaign-planning/campaign-planner";
 import { AssignmentPanel } from "../components/collaboration/assignment-panel";
 import { ThreadedCommentsCard } from "../components/collaboration/threaded-comments-card";
+import { CampaignHelperPanel } from "../components/helper-tools/campaign-helper-panel";
 import { PageHeader } from "../components/shared/page-header";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
@@ -997,6 +998,10 @@ export function CampaignOverviewPage() {
             )}
           </div>
         </Card>
+      </div>
+
+      <div className="mt-8">
+        <CampaignHelperPanel campaignId={campaign.id} />
       </div>
 
       <div className="mt-8 grid gap-6 xl:grid-cols-[1.02fr_0.98fr]">
