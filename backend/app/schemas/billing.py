@@ -56,6 +56,15 @@ class FeatureAccessRead(BaseModel):
     enabled: bool
 
 
+class HelperToolPolicyRead(BaseModel):
+    helper_tools_enabled: bool
+    advanced_ai_helpers_enabled: bool
+    helper_run_burst_limit: int | None
+    helper_run_burst_window_minutes: int
+    advanced_helper_run_burst_limit: int | None
+    advanced_helper_run_burst_window_minutes: int
+
+
 class BrandBillingSnapshotRead(BaseModel):
     brand_id: int
     brand_name: str
@@ -65,6 +74,7 @@ class BrandBillingSnapshotRead(BaseModel):
     available_plans: list[PlanRead]
     usage: list[UsageMetricRead]
     features: list[FeatureAccessRead]
+    helper_policy: HelperToolPolicyRead
     upgrade_prompts: list[str]
     recent_plan_activity: list[AuditLogRead]
 

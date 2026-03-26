@@ -12,6 +12,7 @@ from app.core.enums import DraftReviewAction
 from app.models.user import User
 from app.schemas.campaign_asset import CampaignAssetRead
 from app.schemas.content_template import ContentTemplateRead
+from app.services.access import assert_helper_tool_plan_access
 from app.services.assets import list_campaign_assets
 from app.services.campaigns import get_campaign
 from app.services.drafts import get_draft
@@ -280,6 +281,7 @@ def _resolve_context(
     db: Session,
     *,
     user: User,
+    tool_name: str,
     draft_id: int | None,
     brand_id: int | None,
     campaign_id: int | None,
@@ -320,7 +322,18 @@ def _resolve_context(
     if require_body and not _normalize_text(content_body):
         raise ValueError("content_body is required when the draft does not contain body copy.")
 
-    brand = fetch_brand_guidelines(db, brand_id=brand_id, user=user)
+    assert_helper_tool_plan_access(
+        db,
+        brand_id=brand_id,
+        user_id=user.id,
+        tool_name=tool_name,
+    )
+    brand = fetch_brand_guidelines(
+        db,
+        brand_id=brand_id,
+        user=user,
+        enforce_tool_access=False,
+    )
 
     return ResolvedDraftContext(
         draft_id=draft.id if draft is not None else draft_id,
@@ -450,6 +463,7 @@ def brand_voice_validator(
     context = _resolve_context(
         db,
         user=user,
+        tool_name="brand_voice_validator",
         draft_id=payload.draft_id,
         brand_id=payload.brand_id,
         campaign_id=payload.campaign_id,
@@ -669,6 +683,7 @@ def cross_channel_adaptation(
     context = _resolve_context(
         db,
         user=user,
+        tool_name="cross_channel_adaptation",
         draft_id=payload.draft_id,
         brand_id=payload.brand_id,
         campaign_id=payload.campaign_id,
@@ -828,6 +843,7 @@ def template_recommendation(
     context = _resolve_context(
         db,
         user=user,
+        tool_name="template_recommendation",
         draft_id=payload.draft_id,
         brand_id=payload.brand_id,
         campaign_id=payload.campaign_id,
@@ -901,6 +917,7 @@ def asset_recommendation(
     context = _resolve_context(
         db,
         user=user,
+        tool_name="asset_recommendation",
         draft_id=payload.draft_id,
         brand_id=payload.brand_id,
         campaign_id=payload.campaign_id,
@@ -975,6 +992,7 @@ def review_feedback_to_revision_checklist(
     context = _resolve_context(
         db,
         user=user,
+        tool_name="review_feedback_to_revision_checklist",
         draft_id=payload.draft_id,
         brand_id=None,
         campaign_id=None,

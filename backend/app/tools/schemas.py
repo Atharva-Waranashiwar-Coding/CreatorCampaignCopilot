@@ -158,6 +158,8 @@ class SummarizeReviewFeedbackResponse(BaseModel):
 class HelperToolCatalogItem(BaseModel):
     name: str
     mcp_tool_name: str
+    is_advanced: bool
+    required_feature_key: str
     description: str
     rest_path: str
     http_method: str

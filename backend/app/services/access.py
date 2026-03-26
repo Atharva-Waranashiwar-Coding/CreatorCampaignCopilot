@@ -28,6 +28,7 @@ from app.schemas.billing import (
     BrandSubscriptionRead,
     BrandSubscriptionUpdate,
     FeatureAccessRead,
+    HelperToolPolicyRead,
     PlanRead,
     UsageMetricRead,
 )
@@ -73,6 +74,24 @@ FEATURE_DEFINITIONS = {
         "description": "Use LLM-backed voice validation, adaptation, and revision-assist workflows.",
     },
 }
+HELPER_RATE_LIMIT_DEFINITIONS = {
+    "max_helper_runs_per_10_minutes": {
+        "label": "Helper runs per 10 minutes",
+        "window": timedelta(minutes=10),
+        "advanced_only": False,
+    },
+    "max_advanced_helper_runs_per_10_minutes": {
+        "label": "Advanced AI helper runs per 10 minutes",
+        "window": timedelta(minutes=10),
+        "advanced_only": True,
+    },
+}
+
+
+class HelperRateLimitError(RuntimeError):
+    def __init__(self, message: str, *, retry_after_seconds: int | None = None) -> None:
+        super().__init__(message)
+        self.retry_after_seconds = retry_after_seconds
 
 
 @dataclass(slots=True)
@@ -367,8 +386,102 @@ def build_feature_access(*, plan: Plan) -> list[FeatureAccessRead]:
     ]
 
 
+def build_helper_tool_policy(*, plan: Plan) -> HelperToolPolicyRead:
+    helper_burst_window = HELPER_RATE_LIMIT_DEFINITIONS["max_helper_runs_per_10_minutes"]["window"]
+    advanced_burst_window = HELPER_RATE_LIMIT_DEFINITIONS["max_advanced_helper_runs_per_10_minutes"]["window"]
+    return HelperToolPolicyRead(
+        helper_tools_enabled=is_feature_enabled(plan=plan, feature_key="helper_tools"),
+        advanced_ai_helpers_enabled=is_feature_enabled(plan=plan, feature_key="advanced_ai_helpers"),
+        helper_run_burst_limit=_coerce_limit((plan.limits_json or {}).get("max_helper_runs_per_10_minutes")),
+        helper_run_burst_window_minutes=int(helper_burst_window.total_seconds() // 60),
+        advanced_helper_run_burst_limit=_coerce_limit(
+            (plan.limits_json or {}).get("max_advanced_helper_runs_per_10_minutes")
+        ),
+        advanced_helper_run_burst_window_minutes=int(advanced_burst_window.total_seconds() // 60),
+    )
+
+
 def is_feature_enabled(*, plan: Plan, feature_key: str) -> bool:
     return bool((plan.features_json or {}).get(feature_key, False))
+
+
+def _count_recent_helper_runs(
+    db: Session,
+    *,
+    brand_id: int,
+    since: datetime,
+    advanced_only: bool,
+) -> int:
+    query = select(func.count(ToolUsageLog.id)).where(
+        ToolUsageLog.brand_id == brand_id,
+        ToolUsageLog.created_at >= since,
+    )
+    if advanced_only:
+        query = query.where(ToolUsageLog.tool_name.in_(ADVANCED_HELPER_TOOL_NAMES))
+    return db.scalar(query) or 0
+
+
+def _oldest_helper_run_in_window(
+    db: Session,
+    *,
+    brand_id: int,
+    since: datetime,
+    advanced_only: bool,
+) -> datetime | None:
+    query = (
+        select(ToolUsageLog.created_at)
+        .where(
+            ToolUsageLog.brand_id == brand_id,
+            ToolUsageLog.created_at >= since,
+        )
+        .order_by(ToolUsageLog.created_at.asc())
+        .limit(1)
+    )
+    if advanced_only:
+        query = query.where(ToolUsageLog.tool_name.in_(ADVANCED_HELPER_TOOL_NAMES))
+    return db.scalar(query)
+
+
+def _assert_helper_rate_limit_available(
+    db: Session,
+    *,
+    brand_id: int,
+    plan: Plan,
+    limit_key: str,
+) -> None:
+    definition = HELPER_RATE_LIMIT_DEFINITIONS[limit_key]
+    limit = _coerce_limit((plan.limits_json or {}).get(limit_key))
+    if limit is None:
+        return
+
+    window = definition["window"]
+    since = datetime.now(UTC) - window
+    current = _count_recent_helper_runs(
+        db,
+        brand_id=brand_id,
+        since=since,
+        advanced_only=bool(definition["advanced_only"]),
+    )
+    if current < limit:
+        return
+
+    oldest_created_at = _oldest_helper_run_in_window(
+        db,
+        brand_id=brand_id,
+        since=since,
+        advanced_only=bool(definition["advanced_only"]),
+    )
+    retry_after_seconds: int | None = None
+    if oldest_created_at is not None:
+        retry_after_seconds = max(int((oldest_created_at + window - datetime.now(UTC)).total_seconds()), 1)
+
+    raise HelperRateLimitError(
+        (
+            f"{plan.name} allows {limit} {definition['label'].lower()}. "
+            "This brand has hit that burst limit, so wait for the current window to clear before trying again."
+        ),
+        retry_after_seconds=retry_after_seconds,
+    )
 
 
 def assert_brand_feature_access(
@@ -420,20 +533,15 @@ def assert_helper_tool_plan_access(
     tool_name: str,
 ) -> BrandAccessContext:
     definition = get_helper_tool_definition(tool_name)
-    context = assert_brand_feature_access(
-        db,
-        brand_id=brand_id,
-        user_id=user_id,
-        feature_key="helper_tools",
-        message="Helper tools are not available on this brand plan.",
-    )
-    if definition.is_advanced:
-        assert_brand_feature_access(
-            db,
-            brand_id=brand_id,
-            user_id=user_id,
-            feature_key=definition.required_feature_key,
-            message="Advanced AI helper tools are not available on this brand plan.",
+    context = get_brand_access_context(db, brand_id=brand_id, user_id=user_id)
+
+    if not is_feature_enabled(plan=context.plan, feature_key="helper_tools"):
+        raise PermissionError(
+            f"{context.plan.name} does not include helper tools. Upgrade the brand plan to run {tool_name}."
+        )
+    if definition.is_advanced and not is_feature_enabled(plan=context.plan, feature_key=definition.required_feature_key):
+        raise PermissionError(
+            f"{context.plan.name} does not include advanced AI helpers. Upgrade the brand plan to run {tool_name}."
         )
 
     assert_brand_limit_available(
@@ -441,7 +549,10 @@ def assert_helper_tool_plan_access(
         brand_id=brand_id,
         user_id=user_id,
         metric_key="monthly_helper_runs",
-        message="This brand has reached its monthly helper-tool allowance.",
+        message=(
+            f"{context.plan.name} has reached its monthly helper-tool allowance. "
+            "Upgrade the brand plan to keep running helpers this month."
+        ),
     )
     if definition.is_advanced:
         assert_brand_limit_available(
@@ -449,7 +560,24 @@ def assert_helper_tool_plan_access(
             brand_id=brand_id,
             user_id=user_id,
             metric_key=definition.usage_metric_key,
-            message="This brand has reached its monthly advanced AI helper allowance.",
+            message=(
+                f"{context.plan.name} has reached its monthly advanced AI helper allowance. "
+                "Upgrade the brand plan to keep running advanced helpers this month."
+            ),
+        )
+
+    _assert_helper_rate_limit_available(
+        db,
+        brand_id=brand_id,
+        plan=context.plan,
+        limit_key="max_helper_runs_per_10_minutes",
+    )
+    if definition.is_advanced:
+        _assert_helper_rate_limit_available(
+            db,
+            brand_id=brand_id,
+            plan=context.plan,
+            limit_key="max_advanced_helper_runs_per_10_minutes",
         )
     return context
 
@@ -514,6 +642,7 @@ def get_brand_billing_snapshot(db: Session, *, brand_id: int, user: User) -> Bra
         available_plans=available_plans,
         usage=usage,
         features=features,
+        helper_policy=build_helper_tool_policy(plan=context.plan),
         upgrade_prompts=_build_upgrade_prompts(plan=context.plan, usage=usage, features=features),
         recent_plan_activity=_list_recent_plan_activity(db, brand_id=brand_id),
     )

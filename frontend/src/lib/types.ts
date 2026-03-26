@@ -613,9 +613,20 @@ export type FeatureAccess = {
   enabled: boolean;
 };
 
+export type HelperToolPolicy = {
+  helper_tools_enabled: boolean;
+  advanced_ai_helpers_enabled: boolean;
+  helper_run_burst_limit: number | null;
+  helper_run_burst_window_minutes: number;
+  advanced_helper_run_burst_limit: number | null;
+  advanced_helper_run_burst_window_minutes: number;
+};
+
 export type HelperToolCatalogItem = {
   name: string;
   mcp_tool_name: string;
+  is_advanced: boolean;
+  required_feature_key: string;
   description: string;
   rest_path: string;
   http_method: string;
@@ -919,6 +930,7 @@ export type BrandBillingSnapshot = {
   available_plans: Plan[];
   usage: UsageMetric[];
   features: FeatureAccess[];
+  helper_policy: HelperToolPolicy;
   upgrade_prompts: string[];
   recent_plan_activity: AuditLog[];
 };
