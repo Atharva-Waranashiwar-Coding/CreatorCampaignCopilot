@@ -46,6 +46,8 @@ export function CalendarPage() {
   const [platformFilter, setPlatformFilter] = useState("all");
   const [form, setForm] = useState<CalendarFormState>(emptyCalendarForm);
   const [editingItemId, setEditingItemId] = useState<number | null>(null);
+  const [isItemModalOpen, setIsItemModalOpen] = useState(false);
+  const [selectedModalItem, setSelectedModalItem] = useState<CalendarItem | null>(null);
 
   const gridDays = useMemo(() => buildCalendarGrid(monthCursor), [monthCursor]);
   const rangeStart = gridDays[0];
@@ -85,14 +87,31 @@ export function CalendarPage() {
     }));
   }, [campaignFilter, campaignsQuery.data, form.campaign_id]);
 
+  useEffect(() => {
+    if (!isItemModalOpen) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        closeItemModal();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isItemModalOpen]);
+
   const visibleItems = useMemo(() => {
     const items = calendarQuery.data ?? [];
-    return items.filter((item) => {
+    return items
+      .filter((item) => {
       if (platformFilter !== "all" && item.platform !== platformFilter) {
         return false;
       }
       return true;
-    });
+      })
+      .sort((left, right) => left.scheduled_for.localeCompare(right.scheduled_for));
   }, [calendarQuery.data, platformFilter]);
 
   const itemsByDay = useMemo(() => {
@@ -144,10 +163,12 @@ export function CalendarPage() {
       queryClient.invalidateQueries({ queryKey: ["calendar-items"] });
       queryClient.invalidateQueries({ queryKey: ["campaign-overview", String(item.campaign_id)] });
       setEditingItemId(null);
-      setForm((current) => ({
+      setSelectedModalItem(null);
+      setIsItemModalOpen(false);
+      setForm({
         ...emptyCalendarForm,
-        campaign_id: current.campaign_id || emptyCalendarForm.campaign_id,
-      }));
+        campaign_id: resolveDefaultCampaignId(campaignFilter, campaignsQuery.data, form.campaign_id),
+      });
     },
   });
 
@@ -161,13 +182,52 @@ export function CalendarPage() {
       queryClient.invalidateQueries({ queryKey: ["campaign-overview", String(item.campaign_id)] });
       if (editingItemId === item.id) {
         setEditingItemId(null);
-        setForm((current) => ({
+        setSelectedModalItem(null);
+        setIsItemModalOpen(false);
+        setForm({
           ...emptyCalendarForm,
-          campaign_id: current.campaign_id || emptyCalendarForm.campaign_id,
-        }));
+          campaign_id: resolveDefaultCampaignId(campaignFilter, campaignsQuery.data, form.campaign_id),
+        });
       }
     },
   });
+
+  const openCreateModal = (day?: Date) => {
+    const scheduledFor = new Date(day ?? new Date());
+    if (day) {
+      scheduledFor.setHours(9, 0, 0, 0);
+    }
+
+    setSelectedModalItem(null);
+    setEditingItemId(null);
+    setForm({
+      ...emptyCalendarForm,
+      campaign_id: resolveDefaultCampaignId(campaignFilter, campaignsQuery.data, form.campaign_id),
+      scheduled_for: toDateTimeLocal(scheduledFor),
+    });
+    setIsItemModalOpen(true);
+  };
+
+  const openItemModal = (item: CalendarItem) => {
+    setSelectedModalItem(item);
+    if (item.draft_id) {
+      setEditingItemId(null);
+    } else {
+      setEditingItemId(item.id);
+      setForm(toCalendarForm(item));
+    }
+    setIsItemModalOpen(true);
+  };
+
+  function closeItemModal() {
+    setIsItemModalOpen(false);
+    setSelectedModalItem(null);
+    setEditingItemId(null);
+    setForm({
+      ...emptyCalendarForm,
+      campaign_id: resolveDefaultCampaignId(campaignFilter, campaignsQuery.data, form.campaign_id),
+    });
+  }
 
   if (campaignsQuery.isLoading || calendarQuery.isLoading) {
     return (
@@ -184,13 +244,18 @@ export function CalendarPage() {
         title="Campaign schedule"
         description="Track draft publish dates and campaign milestones in one monthly view, then add manual schedule items for launch operations."
         actions={(
-          <Link className="inline-flex items-center rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground" to="/campaigns">
-            Open campaigns
-          </Link>
+          <div className="flex flex-wrap gap-3">
+            <Button disabled={!campaignsQuery.data?.length} onClick={() => openCreateModal()}>
+              Add calendar item
+            </Button>
+            <Link className="inline-flex min-h-11 items-center rounded-[1rem] border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-foreground shadow-sm" to="/campaigns">
+              Open campaigns
+            </Link>
+          </div>
         )}
       />
 
-      <div className="grid gap-6 xl:grid-cols-[1.18fr_0.82fr]">
+      <div className="space-y-6">
         <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
@@ -257,18 +322,32 @@ export function CalendarPage() {
                   ].join(" ")}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <p className={["text-sm font-semibold", isCurrentMonth ? "text-foreground" : "text-muted-foreground"].join(" ")}>
+                    <button
+                      className={["text-left text-sm font-semibold", isCurrentMonth ? "text-foreground" : "text-muted-foreground"].join(" ")}
+                      onClick={() => openCreateModal(day)}
+                      type="button"
+                    >
                       {day.getDate()}
-                    </p>
-                    {dayItems.length ? <Badge tone="muted">{dayItems.length}</Badge> : null}
+                    </button>
+                    <div className="flex items-center gap-2">
+                      {dayItems.length ? <Badge tone="muted">{dayItems.length}</Badge> : null}
+                      <button
+                        className="inline-flex rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-slate-600 transition hover:border-slate-300"
+                        onClick={() => openCreateModal(day)}
+                        type="button"
+                      >
+                        Add
+                      </button>
+                    </div>
                   </div>
 
                   <div className="mt-3 space-y-2">
                     {dayItems.slice(0, 3).map((item) => (
-                      <Link
+                      <button
                         key={item.id}
-                        className="block rounded-[1rem] border border-border bg-white px-3 py-2 text-left transition hover:bg-slate-50"
-                        to={item.draft_id ? `/drafts/${item.draft_id}` : `/campaigns/${item.campaign_id}`}
+                        className="block w-full rounded-[1rem] border border-border bg-white px-3 py-2 text-left transition hover:bg-slate-50"
+                        onClick={() => openItemModal(item)}
+                        type="button"
                       >
                         <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
                           {formatTime(item.scheduled_for)}
@@ -278,7 +357,7 @@ export function CalendarPage() {
                           <Badge tone={item.draft_id ? "success" : "muted"}>{item.item_type}</Badge>
                           {item.platform ? <Badge tone="muted">{item.platform}</Badge> : null}
                         </div>
-                      </Link>
+                      </button>
                     ))}
                     {dayItems.length > 3 ? (
                       <p className="px-1 text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
@@ -292,188 +371,202 @@ export function CalendarPage() {
           </div>
         </Card>
 
-        <div className="space-y-6">
-          <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Manual milestone</p>
-                <h2 className="mt-2 text-2xl font-semibold tracking-tight">
-                  {editingItemId ? "Edit calendar item" : "Add calendar item"}
-                </h2>
-              </div>
-              {editingItemId ? <Badge tone="warning">Editing</Badge> : <Badge tone="muted">Manual</Badge>}
+        <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Agenda</p>
+              <h2 className="mt-2 text-2xl font-semibold tracking-tight">Upcoming schedule</h2>
             </div>
-
-            <form
-              className="mt-5 space-y-4"
-              onSubmit={(event) => {
-                event.preventDefault();
-                saveItemMutation.mutate();
-              }}
-            >
-              <Field label="Campaign">
-                <Select
-                  disabled={Boolean(editingItemId)}
-                  value={form.campaign_id}
-                  onChange={(event) => setForm((current) => ({ ...current, campaign_id: event.target.value }))}
-                >
-                  <option value="">Select campaign</option>
-                  {campaignsQuery.data?.map((campaign) => (
-                    <option key={campaign.id} value={campaign.id}>
-                      {campaign.name}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-
-              <Field label="Title">
-                <Input
-                  value={form.title}
-                  onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
-                />
-              </Field>
-
-              <div className="grid gap-4 md:grid-cols-2">
-                <Field label="Item type">
-                  <Input
-                    placeholder="launch, review, shoot"
-                    value={form.item_type}
-                    onChange={(event) => setForm((current) => ({ ...current, item_type: event.target.value }))}
-                  />
-                </Field>
-                <Field label="Platform">
-                  <Input
-                    placeholder="Instagram, LinkedIn"
-                    value={form.platform}
-                    onChange={(event) => setForm((current) => ({ ...current, platform: event.target.value }))}
-                  />
-                </Field>
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-2">
-                <Field label="Scheduled for">
-                  <Input
-                    type="datetime-local"
-                    value={form.scheduled_for}
-                    onChange={(event) => setForm((current) => ({ ...current, scheduled_for: event.target.value }))}
-                  />
-                </Field>
-                <Field label="Status">
-                  <Input
-                    placeholder="scheduled, blocked, complete"
-                    value={form.status}
-                    onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))}
-                  />
-                </Field>
-              </div>
-
-              <Field label="Notes">
-                <Textarea
-                  className="min-h-[120px]"
-                  value={form.notes}
-                  onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))}
-                />
-              </Field>
-
-              <MutationFeedback error={saveItemMutation.error || deleteItemMutation.error} />
-              <div className="flex flex-wrap gap-3">
-                <Button disabled={saveItemMutation.isPending || (!editingItemId && !form.campaign_id)} type="submit">
-                  {saveItemMutation.isPending ? "Saving..." : editingItemId ? "Update item" : "Add item"}
-                </Button>
-                {editingItemId ? (
-                  <Button
-                    onClick={() => {
-                      setEditingItemId(null);
-                      setForm((current) => ({
-                        ...emptyCalendarForm,
-                        campaign_id: current.campaign_id || emptyCalendarForm.campaign_id,
-                      }));
-                    }}
-                    type="button"
-                    variant="ghost"
-                  >
-                    Cancel edit
-                  </Button>
-                ) : null}
-              </div>
-            </form>
-          </Card>
-
-          <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Agenda</p>
-                <h2 className="mt-2 text-2xl font-semibold tracking-tight">Upcoming schedule</h2>
-              </div>
+            <div className="flex flex-wrap items-center gap-3">
               <Badge tone="muted">{visibleItems.length} items</Badge>
+              <Button disabled={!campaignsQuery.data?.length} onClick={() => openCreateModal()} variant="secondary">
+                New item
+              </Button>
             </div>
+          </div>
 
-            <div className="mt-5 space-y-3">
-              {visibleItems.length ? (
-                visibleItems.map((item) => (
-                  <div key={item.id} className="rounded-[1.25rem] border border-border bg-white/80 px-4 py-4">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="mt-5 space-y-3">
+            {visibleItems.length ? (
+              visibleItems.map((item) => (
+                <div key={item.id} className="rounded-[1.25rem] border border-border bg-white/80 px-4 py-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-3">
                         <h3 className="text-base font-semibold">{item.title}</h3>
                         <Badge tone={item.draft_id ? "success" : "muted"}>{item.item_type}</Badge>
                         {item.status ? <Badge tone="muted">{formatStatusLabel(item.status)}</Badge> : null}
                       </div>
-                      {item.draft_id ? (
-                        <Badge tone="warning">Draft managed</Badge>
-                      ) : (
-                        <div className="flex flex-wrap gap-2">
-                          <Button
-                            onClick={() => {
-                              setEditingItemId(item.id);
-                              setForm(toCalendarForm(item));
-                            }}
-                            type="button"
-                            variant="secondary"
-                          >
-                            Edit
-                          </Button>
-                          <Button
-                            disabled={deleteItemMutation.isPending}
-                            onClick={() => {
-                              if (window.confirm(`Delete ${item.title}?`)) {
-                                deleteItemMutation.mutate(item);
-                              }
-                            }}
-                            type="button"
-                            variant="danger"
-                          >
-                            Delete
-                          </Button>
-                        </div>
-                      )}
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        {item.campaign_name}
+                        {item.platform ? ` · ${item.platform}` : ""}
+                        {item.draft_title ? ` · ${item.draft_title}` : ""}
+                      </p>
+                      <p className="mt-3 text-sm text-foreground">{formatDateTime(item.scheduled_for)}</p>
+                      {item.notes ? <p className="mt-3 text-sm leading-6 text-muted-foreground">{item.notes}</p> : null}
                     </div>
 
-                    <p className="mt-2 text-sm text-muted-foreground">
-                      {item.campaign_name}
-                      {item.platform ? ` · ${item.platform}` : ""}
-                      {item.draft_title ? ` · ${item.draft_title}` : ""}
-                    </p>
-                    <p className="mt-3 text-sm text-foreground">{formatDateTime(item.scheduled_for)}</p>
-                    {item.notes ? <p className="mt-3 text-sm leading-6 text-muted-foreground">{item.notes}</p> : null}
-                    <div className="mt-4 flex flex-wrap items-center gap-3">
-                      <Link className="text-sm font-medium text-primary" to={item.draft_id ? `/drafts/${item.draft_id}` : `/campaigns/${item.campaign_id}`}>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {item.draft_id ? <Badge tone="warning">Draft managed</Badge> : null}
+                      <Button onClick={() => openItemModal(item)} type="button" variant="secondary">
+                        {item.draft_id ? "View details" : "Edit item"}
+                      </Button>
+                      <Link className="inline-flex min-h-11 items-center rounded-[1rem] border border-transparent px-4 py-2 text-sm font-semibold text-primary transition hover:border-slate-200 hover:bg-white" to={item.draft_id ? `/drafts/${item.draft_id}` : `/campaigns/${item.campaign_id}`}>
                         Open source
                       </Link>
-                      <span className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                        {item.creator_name ?? "Unknown user"}
-                      </span>
                     </div>
                   </div>
-                ))
-              ) : (
-                <p className="rounded-[1.25rem] border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
-                  Scheduled drafts and manual milestones will appear here for the selected month.
-                </p>
-              )}
-            </div>
-          </Card>
-        </div>
+                </div>
+              ))
+            ) : (
+              <p className="rounded-[1.25rem] border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
+                Scheduled drafts and manual milestones will appear here for the selected month.
+              </p>
+            )}
+          </div>
+        </Card>
       </div>
+
+      {isItemModalOpen ? (
+        <CalendarModal onClose={closeItemModal}>
+          {selectedModalItem?.draft_id ? (
+            <div>
+              <div className="flex flex-wrap items-center gap-3">
+                <Badge tone="success">{selectedModalItem.item_type}</Badge>
+                {selectedModalItem.platform ? <Badge tone="muted">{selectedModalItem.platform}</Badge> : null}
+                {selectedModalItem.status ? <Badge tone="muted">{formatStatusLabel(selectedModalItem.status)}</Badge> : null}
+              </div>
+              <h2 className="mt-4 text-2xl font-semibold tracking-tight">{selectedModalItem.title}</h2>
+              <p className="mt-3 text-sm text-muted-foreground">
+                {selectedModalItem.campaign_name}
+                {selectedModalItem.draft_title ? ` · ${selectedModalItem.draft_title}` : ""}
+              </p>
+              <p className="mt-4 text-sm text-foreground">{formatDateTime(selectedModalItem.scheduled_for)}</p>
+              {selectedModalItem.notes ? (
+                <p className="mt-4 text-sm leading-6 text-muted-foreground">{selectedModalItem.notes}</p>
+              ) : null}
+              <div className="mt-6 flex flex-wrap gap-3">
+                <Link
+                  className="inline-flex min-h-11 items-center rounded-[1rem] border border-primary/10 bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-[0_12px_26px_-18px_rgba(15,118,135,0.9)]"
+                  to={selectedModalItem.draft_id ? `/drafts/${selectedModalItem.draft_id}` : `/campaigns/${selectedModalItem.campaign_id}`}
+                >
+                  Open source
+                </Link>
+                <Button onClick={closeItemModal} type="button" variant="ghost">
+                  Close
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Manual milestone</p>
+                  <h2 className="mt-2 text-2xl font-semibold tracking-tight">
+                    {editingItemId ? "Edit calendar item" : "Add calendar item"}
+                  </h2>
+                </div>
+                {editingItemId ? <Badge tone="warning">Editing</Badge> : <Badge tone="muted">Manual</Badge>}
+              </div>
+
+              <form
+                className="mt-5 space-y-4"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  saveItemMutation.mutate();
+                }}
+              >
+                <Field label="Campaign">
+                  <Select
+                    disabled={Boolean(editingItemId)}
+                    value={form.campaign_id}
+                    onChange={(event) => setForm((current) => ({ ...current, campaign_id: event.target.value }))}
+                  >
+                    <option value="">Select campaign</option>
+                    {campaignsQuery.data?.map((campaign) => (
+                      <option key={campaign.id} value={campaign.id}>
+                        {campaign.name}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+
+                <Field label="Title">
+                  <Input
+                    value={form.title}
+                    onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
+                  />
+                </Field>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <Field label="Item type">
+                    <Input
+                      placeholder="launch, review, shoot"
+                      value={form.item_type}
+                      onChange={(event) => setForm((current) => ({ ...current, item_type: event.target.value }))}
+                    />
+                  </Field>
+                  <Field label="Platform">
+                    <Input
+                      placeholder="Instagram, LinkedIn"
+                      value={form.platform}
+                      onChange={(event) => setForm((current) => ({ ...current, platform: event.target.value }))}
+                    />
+                  </Field>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <Field label="Scheduled for">
+                    <Input
+                      type="datetime-local"
+                      value={form.scheduled_for}
+                      onChange={(event) => setForm((current) => ({ ...current, scheduled_for: event.target.value }))}
+                    />
+                  </Field>
+                  <Field label="Status">
+                    <Input
+                      placeholder="scheduled, blocked, complete"
+                      value={form.status}
+                      onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))}
+                    />
+                  </Field>
+                </div>
+
+                <Field label="Notes">
+                  <Textarea
+                    className="min-h-[120px]"
+                    value={form.notes}
+                    onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))}
+                  />
+                </Field>
+
+                <MutationFeedback error={saveItemMutation.error || deleteItemMutation.error} />
+                <div className="flex flex-wrap gap-3">
+                  <Button disabled={saveItemMutation.isPending || (!editingItemId && !form.campaign_id)} type="submit">
+                    {saveItemMutation.isPending ? "Saving..." : editingItemId ? "Update item" : "Add item"}
+                  </Button>
+                  {editingItemId && selectedModalItem ? (
+                    <Button
+                      disabled={deleteItemMutation.isPending}
+                      onClick={() => {
+                        if (window.confirm(`Delete ${selectedModalItem.title}?`)) {
+                          deleteItemMutation.mutate(selectedModalItem);
+                        }
+                      }}
+                      type="button"
+                      variant="danger"
+                    >
+                      {deleteItemMutation.isPending ? "Deleting..." : "Delete item"}
+                    </Button>
+                  ) : null}
+                  <Button onClick={closeItemModal} type="button" variant="ghost">
+                    Cancel
+                  </Button>
+                </div>
+              </form>
+            </div>
+          )}
+        </CalendarModal>
+      ) : null}
     </div>
   );
 }
@@ -496,6 +589,25 @@ function MutationFeedback({ error }: { error: unknown }) {
     <p className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
       {error instanceof ApiError ? error.message : "Request failed."}
     </p>
+  );
+}
+
+function CalendarModal({
+  children,
+  onClose,
+}: {
+  children: ReactNode;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/40 p-4 md:items-center" onClick={onClose} role="presentation">
+      <Card
+        className="max-h-[85vh] w-full max-w-3xl overflow-y-auto border-white/70 bg-white/95 p-6 shadow-2xl shadow-slate-900/30"
+        onClick={(event) => event.stopPropagation()}
+      >
+        {children}
+      </Card>
+    </div>
   );
 }
 
@@ -538,6 +650,27 @@ function formatTime(value: string) {
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date(value));
+}
+
+function resolveDefaultCampaignId(
+  campaignFilter: string,
+  campaigns: Campaign[] | undefined,
+  currentCampaignId: string,
+) {
+  if (campaignFilter !== "all") {
+    return campaignFilter;
+  }
+  if (currentCampaignId) {
+    return currentCampaignId;
+  }
+  return campaigns?.[0] ? String(campaigns[0].id) : "";
+}
+
+function toDateTimeLocal(date: Date) {
+  const copy = new Date(date);
+  const timezoneOffsetMinutes = copy.getTimezoneOffset();
+  copy.setMinutes(copy.getMinutes() - timezoneOffsetMinutes);
+  return copy.toISOString().slice(0, 16);
 }
 
 function toCalendarForm(item: CalendarItem): CalendarFormState {
