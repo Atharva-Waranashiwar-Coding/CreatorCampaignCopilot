@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { Button } from "../components/ui/button";
@@ -13,6 +13,7 @@ import { apiRequest } from "../lib/api";
 import { formatDate, formatDateTime, formatStatusLabel } from "../lib/format";
 import type {
   Brand,
+  CampaignOverview,
   DashboardAnalytics,
   DashboardCampaignHealth,
   DashboardCampaignHealthReport,
@@ -27,6 +28,7 @@ export function DashboardPage() {
   const token = useAuthStore((state) => state.token);
   const [brandFilter, setBrandFilter] = useState("all");
   const [mixInterval, setMixInterval] = useState<"week" | "month">("month");
+  const [selectedCampaignId, setSelectedCampaignId] = useState<number | null>(null);
 
   const brandsQuery = useQuery({
     queryKey: ["brands"],
@@ -63,6 +65,30 @@ export function DashboardPage() {
   const healthReport = campaignHealthQuery.data;
   const atRiskCampaignCount =
     (healthReport?.summary.at_risk_count ?? 0) + (healthReport?.summary.critical_count ?? 0);
+  const campaignFocusOptions = healthReport?.campaigns ?? [];
+
+  useEffect(() => {
+    if (!campaignFocusOptions.length) {
+      setSelectedCampaignId(null);
+      return;
+    }
+
+    if (!selectedCampaignId || !campaignFocusOptions.some((campaign) => campaign.campaign_id === selectedCampaignId)) {
+      setSelectedCampaignId(campaignFocusOptions[0].campaign_id);
+    }
+  }, [campaignFocusOptions, selectedCampaignId]);
+
+  const selectedCampaignHealth = campaignFocusOptions.find((campaign) => campaign.campaign_id === selectedCampaignId) ?? null;
+
+  const selectedCampaignOverviewQuery = useQuery({
+    queryKey: ["dashboard-campaign-overview", selectedCampaignId],
+    queryFn: () => apiRequest<CampaignOverview>(`/campaigns/${selectedCampaignId}/overview`, {}, token),
+    enabled: Boolean(selectedCampaignId),
+  });
+
+  const selectedCampaignBottlenecks = selectedCampaignOverviewQuery.data
+    ? buildCampaignBottlenecks(selectedCampaignOverviewQuery.data)
+    : [];
 
   return (
     <div className="min-w-0">
@@ -86,7 +112,7 @@ export function DashboardPage() {
         )}
       />
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <MetricCard
           hint="Brands included in the current dashboard scope."
           label="Brands"
@@ -139,7 +165,7 @@ export function DashboardPage() {
         />
       </div>
 
-      <div className="mt-8 grid gap-6 xl:grid-cols-2">
+      <div className="mt-8 grid gap-6 xl:grid-cols-[minmax(0,0.96fr)_minmax(0,1.04fr)]">
         <HealthSummaryCard
           averageScore={healthReport?.summary.average_score ?? 0}
           criticalCount={healthReport?.summary.critical_count ?? 0}
@@ -151,27 +177,36 @@ export function DashboardPage() {
         <CampaignHealthListCard
           campaigns={healthReport?.campaigns ?? []}
           isLoading={campaignHealthQuery.isLoading}
+          selectedCampaign={selectedCampaignHealth}
+          selectedCampaignId={selectedCampaignId}
+          onSelectedCampaignChange={setSelectedCampaignId}
         />
       </div>
 
-      <div className="mt-8 grid gap-6 xl:grid-cols-3">
-        <MemberLoadCard
-          eyebrow="Workload"
-          items={analytics?.workload.drafts_by_member ?? []}
-          isLoading={analyticsQuery.isLoading}
-          subtitle="Open draft assignments by team member, including overdue and due-soon load."
-          title="Draft ownership"
-        />
-        <MemberLoadCard
-          eyebrow="Reviews"
-          items={analytics?.workload.pending_reviews_by_reviewer ?? []}
-          isLoading={analyticsQuery.isLoading}
-          subtitle="Open review-task assignments routed to reviewers."
-          title="Reviewer queue"
-        />
+      <div className="mt-8 grid gap-6 xl:grid-cols-[minmax(0,0.98fr)_minmax(0,1.02fr)]">
+        <div className="grid gap-6">
+          <MemberLoadCard
+            eyebrow="Workload"
+            items={analytics?.workload.drafts_by_member ?? []}
+            isLoading={analyticsQuery.isLoading}
+            subtitle="Open draft assignments by team member, including overdue and due-soon load."
+            title="Draft ownership"
+          />
+          <MemberLoadCard
+            eyebrow="Reviews"
+            items={analytics?.workload.pending_reviews_by_reviewer ?? []}
+            isLoading={analyticsQuery.isLoading}
+            subtitle="Open review-task assignments routed to reviewers."
+            title="Reviewer queue"
+          />
+        </div>
         <BottleneckCard
-          isLoading={analyticsQuery.isLoading}
-          items={analytics?.workload.bottlenecks_by_status ?? []}
+          campaigns={healthReport?.campaigns ?? []}
+          isLoading={campaignHealthQuery.isLoading || selectedCampaignOverviewQuery.isLoading}
+          items={selectedCampaignBottlenecks}
+          selectedCampaign={selectedCampaignHealth}
+          selectedCampaignId={selectedCampaignId}
+          onSelectedCampaignChange={setSelectedCampaignId}
         />
       </div>
 
@@ -188,58 +223,64 @@ export function DashboardPage() {
       </div>
 
       <div className="mt-8 grid gap-6 xl:grid-cols-2">
-        <BreakdownCard
-          eyebrow="Campaigns"
-          title="Status mix"
-          subtitle={`${analytics?.campaigns.total ?? 0} total campaigns with ${analytics?.campaigns.active_count ?? 0} currently active.`}
-          buckets={analytics?.campaigns.by_status ?? []}
-          isLoading={analyticsQuery.isLoading}
-        />
-        <BreakdownCard
-          eyebrow="Drafts"
-          title="Pipeline pressure"
-          subtitle={`${analytics?.drafts.pending_review_count ?? 0} in review and ${analytics?.drafts.approved_count ?? 0} approved.`}
-          buckets={analytics?.drafts.by_status ?? []}
-          isLoading={analyticsQuery.isLoading}
-        />
-        <BreakdownCard
-          eyebrow="Reviews"
-          title="Recent review actions"
-          subtitle={`Activity over the last ${analytics?.reviews.recent_window_days ?? 14} days.`}
-          buckets={analytics?.reviews.recent_actions ?? []}
-          isLoading={analyticsQuery.isLoading}
-        />
-        <TimelineCard
-          eyebrow="Schedule"
-          title="Upcoming calendar load"
-          subtitle={`${analytics?.schedule.upcoming_count ?? 0} upcoming items and ${analytics?.schedule.overdue_count ?? 0} overdue scheduled items.`}
-          buckets={analytics?.schedule.upcoming_by_day ?? []}
-          isLoading={analyticsQuery.isLoading}
-        />
+        <div className="grid gap-6">
+          <BreakdownCard
+            eyebrow="Campaigns"
+            title="Status mix"
+            subtitle={`${analytics?.campaigns.total ?? 0} total campaigns with ${analytics?.campaigns.active_count ?? 0} currently active.`}
+            buckets={analytics?.campaigns.by_status ?? []}
+            isLoading={analyticsQuery.isLoading}
+          />
+          <BreakdownCard
+            eyebrow="Drafts"
+            title="Pipeline pressure"
+            subtitle={`${analytics?.drafts.pending_review_count ?? 0} in review and ${analytics?.drafts.approved_count ?? 0} approved.`}
+            buckets={analytics?.drafts.by_status ?? []}
+            isLoading={analyticsQuery.isLoading}
+          />
+        </div>
+        <div className="grid gap-6">
+          <BreakdownCard
+            eyebrow="Reviews"
+            title="Recent review actions"
+            subtitle={`Activity over the last ${analytics?.reviews.recent_window_days ?? 14} days.`}
+            buckets={analytics?.reviews.recent_actions ?? []}
+            isLoading={analyticsQuery.isLoading}
+          />
+          <TimelineCard
+            eyebrow="Schedule"
+            title="Upcoming calendar load"
+            subtitle={`${analytics?.schedule.upcoming_count ?? 0} upcoming items and ${analytics?.schedule.overdue_count ?? 0} overdue scheduled items.`}
+            buckets={analytics?.schedule.upcoming_by_day ?? []}
+            isLoading={analyticsQuery.isLoading}
+          />
+        </div>
       </div>
 
-      <div className="mt-8 grid gap-6 xl:grid-cols-2">
-        <BreakdownCard
-          eyebrow="Content mix"
-          title="Platforms in flight"
-          subtitle="Where current draft output is concentrated by channel."
-          buckets={analytics?.content_mix.by_platform ?? []}
-          isLoading={analyticsQuery.isLoading}
-        />
-        <BreakdownCard
-          eyebrow="Content mix"
-          title="Content types in flight"
-          subtitle="What kinds of deliverables are being produced."
-          buckets={analytics?.content_mix.by_content_type ?? []}
-          isLoading={analyticsQuery.isLoading}
-        />
-        <BreakdownCard
-          eyebrow="Content mix"
-          title="Drafts by campaign status"
-          subtitle="How content production maps onto campaign execution state."
-          buckets={analytics?.content_mix.by_campaign_status ?? []}
-          isLoading={analyticsQuery.isLoading}
-        />
+      <div className="mt-8 grid gap-6 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
+        <div className="grid gap-6">
+          <BreakdownCard
+            eyebrow="Content mix"
+            title="Platforms in flight"
+            subtitle="Where current draft output is concentrated by channel."
+            buckets={analytics?.content_mix.by_platform ?? []}
+            isLoading={analyticsQuery.isLoading}
+          />
+          <BreakdownCard
+            eyebrow="Content mix"
+            title="Content types in flight"
+            subtitle="What kinds of deliverables are being produced."
+            buckets={analytics?.content_mix.by_content_type ?? []}
+            isLoading={analyticsQuery.isLoading}
+          />
+          <BreakdownCard
+            eyebrow="Content mix"
+            title="Drafts by campaign status"
+            subtitle="How content production maps onto campaign execution state."
+            buckets={analytics?.content_mix.by_campaign_status ?? []}
+            isLoading={analyticsQuery.isLoading}
+          />
+        </div>
         <div>
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div>
@@ -389,9 +430,15 @@ function HealthSummaryCard({
 function CampaignHealthListCard({
   campaigns,
   isLoading,
+  selectedCampaign,
+  selectedCampaignId,
+  onSelectedCampaignChange,
 }: {
   campaigns: DashboardCampaignHealth[];
   isLoading: boolean;
+  selectedCampaign: DashboardCampaignHealth | null;
+  selectedCampaignId: number | null;
+  onSelectedCampaignChange: (campaignId: number) => void;
 }) {
   return (
     <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
@@ -400,64 +447,69 @@ function CampaignHealthListCard({
           <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Campaign health</p>
           <h2 className="mt-2 text-2xl font-semibold tracking-tight">Why scores moved</h2>
         </div>
-        <Badge tone="muted">{campaigns.length} campaigns</Badge>
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          <Badge tone="muted">{campaigns.length} campaigns</Badge>
+          <CampaignFocusSelect
+            campaigns={campaigns}
+            selectedCampaignId={selectedCampaignId}
+            onChange={onSelectedCampaignChange}
+          />
+        </div>
       </div>
 
       {isLoading ? (
         <p className="mt-6 text-sm text-muted-foreground">Loading scored campaigns...</p>
-      ) : campaigns.length ? (
-        <div className="mt-6 space-y-4">
-          {campaigns.slice(0, 6).map((campaign) => (
-            <div key={campaign.campaign_id} className="rounded-[1.25rem] border border-border bg-white/80 px-4 py-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Link className="text-base font-semibold text-foreground hover:text-primary" to={`/campaigns/${campaign.campaign_id}`}>
-                      {campaign.campaign_name}
-                    </Link>
-                    <Badge tone={healthTone(campaign.label)}>{campaign.label.replace("_", " ")}</Badge>
-                    <Badge tone="muted">{campaign.project_name}</Badge>
-                  </div>
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    {campaign.brand_name} · {formatStatusLabel(campaign.campaign_status)}
-                    {campaign.next_deadline_at ? ` · Next deadline ${formatDateTime(campaign.next_deadline_at)}` : ""}
-                  </p>
+      ) : selectedCampaign ? (
+        <div className="mt-6">
+          <div className="rounded-[1.25rem] border border-border bg-white/80 px-4 py-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Link className="text-base font-semibold text-foreground hover:text-primary" to={`/campaigns/${selectedCampaign.campaign_id}`}>
+                    {selectedCampaign.campaign_name}
+                  </Link>
+                  <Badge tone={healthTone(selectedCampaign.label)}>{selectedCampaign.label.replace("_", " ")}</Badge>
+                  <Badge tone="muted">{selectedCampaign.project_name}</Badge>
                 </div>
-
-                <div className="text-right">
-                  <p className="text-3xl font-semibold tracking-tight">{campaign.score}</p>
-                  <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">score</p>
-                </div>
-              </div>
-
-              <div className="mt-4 h-2 rounded-full bg-slate-200/80">
-                <div
-                  className="h-full rounded-full bg-[linear-gradient(90deg,rgba(12,86,102,0.95),rgba(26,132,153,0.85))]"
-                  style={{ width: `${campaign.score}%` }}
-                />
-              </div>
-
-              {campaign.factors.length ? (
-                <div className="mt-4 space-y-2">
-                  {campaign.factors.map((factor) => (
-                    <div key={factor.key} className="rounded-[1rem] border border-amber-200 bg-amber-50/70 px-3 py-3">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge tone="warning">-{factor.penalty}</Badge>
-                        <p className="text-sm font-medium text-foreground">
-                          {factor.label} · {factor.count}
-                        </p>
-                      </div>
-                      <p className="mt-2 text-sm leading-6 text-muted-foreground">{factor.detail}</p>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="mt-4 text-sm text-muted-foreground">
-                  No active health penalties. The campaign has no overdue, approval, asset, assignment, or deadline pressure flags.
+                <p className="mt-2 text-sm text-muted-foreground">
+                  {selectedCampaign.brand_name} · {formatStatusLabel(selectedCampaign.campaign_status)}
+                  {selectedCampaign.next_deadline_at ? ` · Next deadline ${formatDateTime(selectedCampaign.next_deadline_at)}` : ""}
                 </p>
-              )}
+              </div>
+
+              <div className="text-right">
+                <p className="text-3xl font-semibold tracking-tight">{selectedCampaign.score}</p>
+                <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">score</p>
+              </div>
             </div>
-          ))}
+
+            <div className="mt-4 h-2 rounded-full bg-slate-200/80">
+              <div
+                className="h-full rounded-full bg-[linear-gradient(90deg,rgba(12,86,102,0.95),rgba(26,132,153,0.85))]"
+                style={{ width: `${selectedCampaign.score}%` }}
+              />
+            </div>
+
+            {selectedCampaign.factors.length ? (
+              <div className="mt-4 space-y-2">
+                {selectedCampaign.factors.map((factor) => (
+                  <div key={factor.key} className="rounded-[1rem] border border-amber-200 bg-amber-50/70 px-3 py-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge tone="warning">-{factor.penalty}</Badge>
+                      <p className="text-sm font-medium text-foreground">
+                        {factor.label} · {factor.count}
+                      </p>
+                    </div>
+                    <p className="mt-2 text-sm leading-6 text-muted-foreground">{factor.detail}</p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-4 text-sm text-muted-foreground">
+                No active health penalties. This campaign has no overdue, approval, asset, assignment, or deadline pressure flags.
+              </p>
+            )}
+          </div>
         </div>
       ) : (
         <p className="mt-6 text-sm text-muted-foreground">Campaign health will appear here once campaigns exist in the current scope.</p>
@@ -518,21 +570,44 @@ function MemberLoadCard({
 }
 
 function BottleneckCard({
+  campaigns,
   items,
   isLoading,
+  selectedCampaign,
+  selectedCampaignId,
+  onSelectedCampaignChange,
 }: {
+  campaigns: DashboardCampaignHealth[];
   items: DashboardAnalytics["workload"]["bottlenecks_by_status"];
   isLoading: boolean;
+  selectedCampaign: DashboardCampaignHealth | null;
+  selectedCampaignId: number | null;
+  onSelectedCampaignChange: (campaignId: number) => void;
 }) {
   const maxCount = Math.max(...items.map((item) => item.count), 0);
 
   return (
     <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
-      <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Bottlenecks</p>
-      <h2 className="mt-2 text-2xl font-semibold tracking-tight">Status drag</h2>
-      <p className="mt-3 text-sm text-muted-foreground">
-        Drafts grouped by current status, with stale counts based on drafts that have not moved in more than three days.
-      </p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Bottlenecks</p>
+          <h2 className="mt-2 text-2xl font-semibold tracking-tight">Status drag</h2>
+          <p className="mt-3 text-sm text-muted-foreground">
+            Drafts grouped by current status for the selected campaign, with stale counts based on drafts that have not moved in more than three days.
+          </p>
+        </div>
+        <CampaignFocusSelect
+          campaigns={campaigns}
+          selectedCampaignId={selectedCampaignId}
+          onChange={onSelectedCampaignChange}
+        />
+      </div>
+
+      {selectedCampaign ? (
+        <p className="mt-4 text-sm text-muted-foreground">
+          {selectedCampaign.campaign_name} · {selectedCampaign.project_name} · {selectedCampaign.brand_name}
+        </p>
+      ) : null}
 
       {isLoading ? (
         <p className="mt-6 text-sm text-muted-foreground">Loading bottlenecks...</p>
@@ -554,7 +629,7 @@ function BottleneckCard({
           ))}
         </div>
       ) : (
-        <p className="mt-6 text-sm text-muted-foreground">No draft bottlenecks are currently visible.</p>
+        <p className="mt-6 text-sm text-muted-foreground">No draft bottlenecks are currently visible for this campaign.</p>
       )}
     </Card>
   );
@@ -991,6 +1066,30 @@ function InsightMeterCard({
   );
 }
 
+function CampaignFocusSelect({
+  campaigns,
+  selectedCampaignId,
+  onChange,
+}: {
+  campaigns: DashboardCampaignHealth[];
+  selectedCampaignId: number | null;
+  onChange: (campaignId: number) => void;
+}) {
+  return (
+    <Select
+      className="min-w-[260px]"
+      value={selectedCampaignId ? String(selectedCampaignId) : ""}
+      onChange={(event) => onChange(Number(event.target.value))}
+    >
+      {campaigns.map((campaign) => (
+        <option key={campaign.campaign_id} value={campaign.campaign_id}>
+          {campaign.campaign_name} · {campaign.project_name}
+        </option>
+      ))}
+    </Select>
+  );
+}
+
 function buildCycleDots(value: number) {
   const visibleDots = Math.min(Math.max(value, 0), 6);
   return Array.from({ length: 6 }, (_, index) => index < visibleDots);
@@ -1030,4 +1129,28 @@ function healthTone(label: string): "success" | "warning" | "muted" {
     return "warning";
   }
   return "muted";
+}
+
+function buildCampaignBottlenecks(overview: CampaignOverview): DashboardAnalytics["workload"]["bottlenecks_by_status"] {
+  const staleCutoff = Date.now() - (3 * 24 * 60 * 60 * 1000);
+
+  return overview.status_breakdown
+    .map((stage) => ({
+      status: stage.status,
+      label: stage.status_label,
+      count: stage.count,
+      stale_count: overview.drafts.filter(
+        (draft) => draft.status === stage.status && new Date(draft.updated_at).getTime() < staleCutoff,
+      ).length,
+    }))
+    .filter((item) => item.count > 0)
+    .sort((left, right) => {
+      if (right.count !== left.count) {
+        return right.count - left.count;
+      }
+      if (right.stale_count !== left.stale_count) {
+        return right.stale_count - left.stale_count;
+      }
+      return left.label.localeCompare(right.label);
+    });
 }
