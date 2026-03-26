@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     helper_llm_model: str = "gpt-5.2"
     helper_llm_reasoning_effort: str = "medium"
     helper_llm_timeout_seconds: int = 45
+    helper_llm_max_retries: int = 2
+    helper_llm_retry_backoff_seconds: float = 1.5
     database_url: str = "postgresql+psycopg://postgres:postgres@db:5432/creator_campaign_copilot"
     jwt_secret_key: str = "change-me"
     jwt_algorithm: str = "HS256"

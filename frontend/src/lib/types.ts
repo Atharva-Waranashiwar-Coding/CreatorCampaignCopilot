@@ -758,8 +758,18 @@ export type AdvancedToolContext = {
   content_type: string | null;
 };
 
+export type AdvancedToolExecutionMode = "deterministic" | "llm" | "deterministic_fallback";
+
+export type AdvancedToolExecution = {
+  mode: AdvancedToolExecutionMode;
+  provider_name: string | null;
+  model: string | null;
+  fallback_reason: string | null;
+};
+
 export type BrandVoiceValidatorResponse = {
   context: AdvancedToolContext;
+  execution: AdvancedToolExecution;
   score: number;
   verdict: "pass" | "warn" | "fail";
   summary: string;
@@ -771,6 +781,7 @@ export type BrandVoiceValidatorResponse = {
 
 export type CrossChannelAdaptationResponse = {
   context: AdvancedToolContext;
+  execution: AdvancedToolExecution;
   source_platform: string;
   target_platform: string;
   adapted_title: string | null;
@@ -796,6 +807,7 @@ export type TemplateRecommendationItem = {
 
 export type TemplateRecommendationResponse = {
   context: AdvancedToolContext;
+  execution: AdvancedToolExecution;
   total_candidates: number;
   recommendations: TemplateRecommendationItem[];
 };
@@ -816,6 +828,7 @@ export type AssetRecommendationItem = {
 
 export type AssetRecommendationResponse = {
   context: AdvancedToolContext;
+  execution: AdvancedToolExecution;
   total_candidates: number;
   recommendations: AssetRecommendationItem[];
 };
@@ -830,6 +843,7 @@ export type RevisionChecklistItem = {
 
 export type ReviewFeedbackToRevisionChecklistResponse = {
   context: AdvancedToolContext;
+  execution: AdvancedToolExecution;
   summary: string;
   checklist_items: RevisionChecklistItem[];
   preserved_strengths: string[];

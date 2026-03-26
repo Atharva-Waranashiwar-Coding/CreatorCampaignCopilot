@@ -8,6 +8,8 @@ from pydantic import BaseModel, Field
 from app.core.enums import DraftReviewAction
 from app.tools.schemas import ValidationCheckResult
 
+AdvancedExecutionMode = Literal["deterministic", "llm", "deterministic_fallback"]
+
 
 class AdvancedDraftContextInput(BaseModel):
     draft_id: int | None = None
@@ -30,12 +32,30 @@ class AdvancedToolContext(BaseModel):
     content_type: str | None = None
 
 
+class AdvancedToolExecution(BaseModel):
+    mode: AdvancedExecutionMode
+    provider_name: str | None = None
+    model: str | None = None
+    fallback_reason: str | None = None
+
+
 class BrandVoiceValidatorRequest(AdvancedDraftContextInput):
     pass
 
 
+class LLMBrandVoiceValidatorOutput(BaseModel):
+    score: int = Field(ge=0, le=100)
+    verdict: Literal["pass", "warn", "fail"]
+    summary: str
+    aligned_traits: list[str]
+    missing_traits: list[str]
+    checks: list[ValidationCheckResult]
+    revision_suggestions: list[str]
+
+
 class BrandVoiceValidatorResponse(BaseModel):
     context: AdvancedToolContext
+    execution: AdvancedToolExecution
     score: int = Field(ge=0, le=100)
     verdict: Literal["pass", "warn", "fail"]
     summary: str
@@ -52,8 +72,18 @@ class CrossChannelAdaptationRequest(AdvancedDraftContextInput):
     include_hashtags: bool = True
 
 
+class LLMCrossChannelAdaptationOutput(BaseModel):
+    adapted_title: str | None = None
+    adapted_body: str
+    recommended_content_type: str | None = None
+    adaptation_notes: list[str]
+    warnings: list[str]
+    derived_hashtags: list[str]
+
+
 class CrossChannelAdaptationResponse(BaseModel):
     context: AdvancedToolContext
+    execution: AdvancedToolExecution
     source_platform: str
     target_platform: str
     adapted_title: str | None = None
@@ -83,6 +113,7 @@ class TemplateRecommendationItem(BaseModel):
 
 class TemplateRecommendationResponse(BaseModel):
     context: AdvancedToolContext
+    execution: AdvancedToolExecution
     total_candidates: int
     recommendations: list[TemplateRecommendationItem]
 
@@ -107,6 +138,7 @@ class AssetRecommendationItem(BaseModel):
 
 class AssetRecommendationResponse(BaseModel):
     context: AdvancedToolContext
+    execution: AdvancedToolExecution
     total_candidates: int
     recommendations: list[AssetRecommendationItem]
 
@@ -124,8 +156,15 @@ class RevisionChecklistItem(BaseModel):
     guidance: str
 
 
+class LLMReviewFeedbackChecklistOutput(BaseModel):
+    summary: str
+    checklist_items: list[RevisionChecklistItem]
+    preserved_strengths: list[str]
+
+
 class ReviewFeedbackToRevisionChecklistResponse(BaseModel):
     context: AdvancedToolContext
+    execution: AdvancedToolExecution
     summary: str
     checklist_items: list[RevisionChecklistItem]
     preserved_strengths: list[str]

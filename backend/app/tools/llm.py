@@ -3,6 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 import json
+import time
 from typing import Any
 from urllib import error, request
 
@@ -52,11 +53,15 @@ class OpenAIResponsesProvider(LLMProvider):
         model: str,
         reasoning_effort: str,
         timeout_seconds: int,
+        max_retries: int,
+        retry_backoff_seconds: float,
     ) -> None:
         self._api_key = api_key
         self._model = model
         self._reasoning_effort = reasoning_effort
         self._timeout_seconds = timeout_seconds
+        self._max_retries = max(max_retries, 0)
+        self._retry_backoff_seconds = max(retry_backoff_seconds, 0.0)
 
     def generate_structured_output(
         self,
@@ -91,26 +96,45 @@ class OpenAIResponsesProvider(LLMProvider):
 
     def _make_request(self, body: dict[str, Any]) -> dict[str, Any]:
         raw_request = json.dumps(body).encode("utf-8")
-        req = request.Request(
-            "https://api.openai.com/v1/responses",
-            data=raw_request,
-            method="POST",
-            headers={
-                "Authorization": f"Bearer {self._api_key}",
-                "Content-Type": "application/json",
-            },
-        )
+        max_attempts = self._max_retries + 1
 
-        try:
-            with request.urlopen(req, timeout=self._timeout_seconds) as response:
-                return json.loads(response.read().decode("utf-8"))
-        except error.HTTPError as exc:
-            detail = exc.read().decode("utf-8", errors="replace")
-            raise LLMProviderError(
-                f"OpenAI Responses API request failed with status {exc.code}: {detail}"
-            ) from exc
-        except error.URLError as exc:
-            raise LLMProviderError(f"OpenAI Responses API request failed: {exc.reason}") from exc
+        for attempt in range(1, max_attempts + 1):
+            req = request.Request(
+                "https://api.openai.com/v1/responses",
+                data=raw_request,
+                method="POST",
+                headers={
+                    "Authorization": f"Bearer {self._api_key}",
+                    "Content-Type": "application/json",
+                },
+            )
+
+            try:
+                with request.urlopen(req, timeout=self._timeout_seconds) as response:
+                    return json.loads(response.read().decode("utf-8"))
+            except error.HTTPError as exc:
+                detail = exc.read().decode("utf-8", errors="replace")
+                if attempt < max_attempts and self._should_retry_http_status(exc.code):
+                    self._sleep_before_retry(attempt)
+                    continue
+                raise LLMProviderError(
+                    f"OpenAI Responses API request failed with status {exc.code}: {detail}"
+                ) from exc
+            except error.URLError as exc:
+                if attempt < max_attempts:
+                    self._sleep_before_retry(attempt)
+                    continue
+                raise LLMProviderError(f"OpenAI Responses API request failed: {exc.reason}") from exc
+
+        raise LLMProviderError("OpenAI Responses API request failed after retries.")
+
+    def _should_retry_http_status(self, status_code: int) -> bool:
+        return status_code in {408, 409, 429} or 500 <= status_code <= 599
+
+    def _sleep_before_retry(self, attempt: int) -> None:
+        if self._retry_backoff_seconds <= 0:
+            return
+        time.sleep(self._retry_backoff_seconds * attempt)
 
     def _extract_payload(self, response_json: dict[str, Any]) -> dict[str, Any]:
         output_items = response_json.get("output")
@@ -155,6 +179,8 @@ def get_llm_provider() -> LLMProvider:
             model=settings.helper_llm_model,
             reasoning_effort=settings.helper_llm_reasoning_effort,
             timeout_seconds=settings.helper_llm_timeout_seconds,
+            max_retries=settings.helper_llm_max_retries,
+            retry_backoff_seconds=settings.helper_llm_retry_backoff_seconds,
         )
 
     raise LLMProviderNotConfiguredError(
