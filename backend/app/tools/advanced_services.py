@@ -1,20 +1,25 @@
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
+from typing import Any
 
+from pydantic import BaseModel, ValidationError
 from sqlalchemy.orm import Session
 
 from app.core.enums import DraftReviewAction
 from app.models.user import User
 from app.schemas.campaign_asset import CampaignAssetRead
 from app.schemas.content_template import ContentTemplateRead
+from app.services.access import assert_helper_tool_plan_access
 from app.services.assets import list_campaign_assets
 from app.services.campaigns import get_campaign
 from app.services.drafts import get_draft
 from app.services.reviews import get_draft_review_thread
 from app.services.templates import list_templates
 from app.tools.advanced_schemas import (
+    AdvancedToolExecution,
     AdvancedToolContext,
     AssetRecommendationItem,
     AssetRecommendationRequest,
@@ -23,6 +28,9 @@ from app.tools.advanced_schemas import (
     BrandVoiceValidatorResponse,
     CrossChannelAdaptationRequest,
     CrossChannelAdaptationResponse,
+    LLMBrandVoiceValidatorOutput,
+    LLMCrossChannelAdaptationOutput,
+    LLMReviewFeedbackChecklistOutput,
     RevisionChecklistItem,
     ReviewFeedbackToRevisionChecklistRequest,
     ReviewFeedbackToRevisionChecklistResponse,
@@ -30,6 +38,7 @@ from app.tools.advanced_schemas import (
     TemplateRecommendationRequest,
     TemplateRecommendationResponse,
 )
+from app.tools.llm import LLMProviderError, LLMProviderNotConfiguredError, get_llm_provider
 from app.tools.schemas import ValidationCheckResult
 from app.tools.services import fetch_brand_guidelines
 
@@ -151,6 +160,12 @@ class ResolvedDraftContext:
         )
 
 
+@dataclass(slots=True)
+class StructuredLLMAttempt:
+    payload: BaseModel | None
+    execution: AdvancedToolExecution
+
+
 def _normalize_text(value: str | None) -> str:
     return re.sub(r"\s+", " ", value or "").strip()
 
@@ -205,10 +220,68 @@ def _clip(value: str, *, limit: int) -> str:
     return f"{value[: limit - 3].rstrip()}..."
 
 
+def _execution_metadata(
+    mode: str,
+    *,
+    provider_name: str | None = None,
+    model: str | None = None,
+    fallback_reason: str | None = None,
+) -> AdvancedToolExecution:
+    return AdvancedToolExecution(
+        mode=mode,
+        provider_name=provider_name,
+        model=model,
+        fallback_reason=fallback_reason,
+    )
+
+
+def _build_llm_input(payload: dict[str, Any]) -> str:
+    return json.dumps(payload, ensure_ascii=True, sort_keys=True, default=str)
+
+
+def _attempt_llm_structured_output(
+    *,
+    schema_name: str,
+    schema_model: type[BaseModel],
+    instructions: str,
+    input_payload: dict[str, Any],
+) -> StructuredLLMAttempt:
+    try:
+        provider = get_llm_provider()
+    except LLMProviderNotConfiguredError:
+        return StructuredLLMAttempt(payload=None, execution=_execution_metadata("deterministic"))
+
+    result = None
+    try:
+        result = provider.generate_structured_output(
+            schema_name=schema_name,
+            schema_model=schema_model,
+            instructions=instructions,
+            input_text=_build_llm_input(input_payload),
+        )
+        payload = schema_model.model_validate(result.payload)
+    except (LLMProviderError, ValidationError) as exc:
+        return StructuredLLMAttempt(
+            payload=None,
+            execution=_execution_metadata(
+                "deterministic_fallback",
+                provider_name=result.provider_name if result is not None else provider.provider_name,
+                model=result.model if result is not None else None,
+                fallback_reason=_excerpt(str(exc), limit=240),
+            ),
+        )
+
+    return StructuredLLMAttempt(
+        payload=payload,
+        execution=_execution_metadata("llm", provider_name=result.provider_name, model=result.model),
+    )
+
+
 def _resolve_context(
     db: Session,
     *,
     user: User,
+    tool_name: str,
     draft_id: int | None,
     brand_id: int | None,
     campaign_id: int | None,
@@ -249,7 +322,18 @@ def _resolve_context(
     if require_body and not _normalize_text(content_body):
         raise ValueError("content_body is required when the draft does not contain body copy.")
 
-    brand = fetch_brand_guidelines(db, brand_id=brand_id, user=user)
+    assert_helper_tool_plan_access(
+        db,
+        brand_id=brand_id,
+        user_id=user.id,
+        tool_name=tool_name,
+    )
+    brand = fetch_brand_guidelines(
+        db,
+        brand_id=brand_id,
+        user=user,
+        enforce_tool_access=False,
+    )
 
     return ResolvedDraftContext(
         draft_id=draft.id if draft is not None else draft_id,
@@ -268,6 +352,108 @@ def _resolve_context(
     )
 
 
+def _brand_voice_llm_instructions() -> str:
+    return (
+        "You are evaluating brand-voice alignment for a marketing draft. "
+        "Return structured JSON only. Score the draft from 0 to 100. "
+        "Use verdict 'pass' for strong alignment, 'warn' for partial alignment, and 'fail' for clearly off-brand copy. "
+        "Use only these check names: content_depth, channel_alignment, voice_trait_coverage, audience_alignment, pacing_and_emphasis. "
+        "Each check detail should be concrete, concise, and grounded in the provided draft and brand profile. "
+        "Revision suggestions should be directly actionable and limited to the most important edits."
+    )
+
+
+def _cross_channel_llm_instructions() -> str:
+    return (
+        "You are adapting marketing copy from one channel to another. Return structured JSON only. "
+        "Preserve the intent of the original draft, keep the output usable as real campaign copy, "
+        "and follow the provided target-platform rules when possible. "
+        "Warnings should call out channel-fit or missing-context issues only when they are material."
+    )
+
+
+def _review_feedback_llm_instructions(*, limit: int) -> str:
+    return (
+        "You are converting review comments into a revision checklist for a content draft. "
+        "Return structured JSON only. "
+        f"Produce no more than {limit} checklist items. "
+        "Checklist items must be concrete, deduplicated, and phrased as actionable edits. "
+        "Use 'high' priority for blocking or rejected feedback, 'medium' for normal revision work, and 'low' for polish. "
+        "Preserved strengths should capture positive feedback worth retaining in the next revision."
+    )
+
+
+def _brand_voice_llm_input(context: ResolvedDraftContext) -> dict[str, Any]:
+    content_text = " ".join(part for part in [context.title, context.content_body] if part)
+    return {
+        "context": context.to_schema().model_dump(mode="json"),
+        "brand_profile": {
+            "tone_of_voice": context.tone_of_voice,
+            "target_audience": context.target_audience,
+            "preferred_channels": context.preferred_channels,
+            "guidelines_summary": context.guidelines_summary,
+        },
+        "draft": {
+            "title": context.title,
+            "platform": context.platform,
+            "content_type": context.content_type,
+            "content_body": context.content_body,
+            "word_count": len((context.content_body or "").split()),
+            "keywords": _extract_keywords(content_text, limit=24),
+        },
+    }
+
+
+def _cross_channel_llm_input(
+    *,
+    context: ResolvedDraftContext,
+    payload: CrossChannelAdaptationRequest,
+    source_platform: str,
+    target_platform: str,
+) -> dict[str, Any]:
+    target_key = _platform_key(target_platform)
+    rules = PLATFORM_RULES.get(target_key, {})
+    return {
+        "context": context.to_schema().model_dump(mode="json"),
+        "brand_profile": {
+            "preferred_channels": context.preferred_channels,
+            "tone_of_voice": context.tone_of_voice,
+            "target_audience": context.target_audience,
+            "guidelines_summary": context.guidelines_summary,
+        },
+        "source_platform": source_platform,
+        "target_platform": target_platform,
+        "options": {
+            "preserve_call_to_action": payload.preserve_call_to_action,
+            "include_hashtags": payload.include_hashtags,
+        },
+        "platform_rules": rules,
+        "draft": {
+            "title": context.title,
+            "content_type": context.content_type,
+            "content_body": context.content_body,
+        },
+    }
+
+
+def _review_feedback_llm_input(
+    *,
+    context: ResolvedDraftContext,
+    review_comments: list[dict[str, Any]],
+    limit: int,
+) -> dict[str, Any]:
+    return {
+        "context": context.to_schema().model_dump(mode="json"),
+        "brand_profile": {
+            "tone_of_voice": context.tone_of_voice,
+            "target_audience": context.target_audience,
+            "guidelines_summary": context.guidelines_summary,
+        },
+        "limit": limit,
+        "review_comments": review_comments,
+    }
+
+
 def brand_voice_validator(
     db: Session,
     *,
@@ -277,6 +463,7 @@ def brand_voice_validator(
     context = _resolve_context(
         db,
         user=user,
+        tool_name="brand_voice_validator",
         draft_id=payload.draft_id,
         brand_id=payload.brand_id,
         campaign_id=payload.campaign_id,
@@ -286,6 +473,28 @@ def brand_voice_validator(
         content_body=payload.content_body,
         require_body=True,
     )
+
+    llm_attempt = _attempt_llm_structured_output(
+        schema_name="brand_voice_validation",
+        schema_model=LLMBrandVoiceValidatorOutput,
+        instructions=_brand_voice_llm_instructions(),
+        input_payload=_brand_voice_llm_input(context),
+    )
+    if isinstance(llm_attempt.payload, LLMBrandVoiceValidatorOutput):
+        return BrandVoiceValidatorResponse(
+            context=context.to_schema(),
+            execution=llm_attempt.execution,
+            **llm_attempt.payload.model_dump(mode="json"),
+        )
+
+    deterministic = _brand_voice_validator_deterministic(context)
+    if llm_attempt.execution.mode == "deterministic":
+        return deterministic
+    return deterministic.model_copy(update={"execution": llm_attempt.execution})
+
+
+def _brand_voice_validator_deterministic(context: ResolvedDraftContext) -> BrandVoiceValidatorResponse:
+    execution = _execution_metadata("deterministic")
 
     content_text = " ".join(part for part in [context.title, context.content_body] if part)
     content_keywords = set(_extract_keywords(content_text, limit=40))
@@ -451,6 +660,7 @@ def brand_voice_validator(
 
     return BrandVoiceValidatorResponse(
         context=context.to_schema(),
+        execution=execution,
         score=score,
         verdict=verdict,
         summary=(
@@ -473,6 +683,7 @@ def cross_channel_adaptation(
     context = _resolve_context(
         db,
         user=user,
+        tool_name="cross_channel_adaptation",
         draft_id=payload.draft_id,
         brand_id=payload.brand_id,
         campaign_id=payload.campaign_id,
@@ -482,9 +693,48 @@ def cross_channel_adaptation(
         content_body=payload.content_body,
         require_body=True,
     )
-
     source_platform = _normalize_text(payload.source_platform) or context.platform or "Generic"
     target_platform = _normalize_text(payload.target_platform)
+
+    llm_attempt = _attempt_llm_structured_output(
+        schema_name="cross_channel_adaptation",
+        schema_model=LLMCrossChannelAdaptationOutput,
+        instructions=_cross_channel_llm_instructions(),
+        input_payload=_cross_channel_llm_input(
+            context=context,
+            payload=payload,
+            source_platform=source_platform,
+            target_platform=target_platform,
+        ),
+    )
+    if isinstance(llm_attempt.payload, LLMCrossChannelAdaptationOutput):
+        return CrossChannelAdaptationResponse(
+            context=context.to_schema(),
+            execution=llm_attempt.execution,
+            source_platform=source_platform,
+            target_platform=target_platform,
+            **llm_attempt.payload.model_dump(mode="json"),
+        )
+
+    deterministic = _cross_channel_adaptation_deterministic(
+        context=context,
+        payload=payload,
+        source_platform=source_platform,
+        target_platform=target_platform,
+    )
+    if llm_attempt.execution.mode == "deterministic":
+        return deterministic
+    return deterministic.model_copy(update={"execution": llm_attempt.execution})
+
+
+def _cross_channel_adaptation_deterministic(
+    *,
+    context: ResolvedDraftContext,
+    payload: CrossChannelAdaptationRequest,
+    source_platform: str,
+    target_platform: str,
+) -> CrossChannelAdaptationResponse:
+    execution = _execution_metadata("deterministic")
     rules = PLATFORM_RULES.get(_platform_key(target_platform), {})
     title_limit = int(rules.get("title_limit", 90))
     sentences = _split_sentences(context.content_body)
@@ -550,6 +800,7 @@ def cross_channel_adaptation(
 
     return CrossChannelAdaptationResponse(
         context=context.to_schema(),
+        execution=execution,
         source_platform=source_platform,
         target_platform=target_platform,
         adapted_title=adapted_title or None,
@@ -592,6 +843,7 @@ def template_recommendation(
     context = _resolve_context(
         db,
         user=user,
+        tool_name="template_recommendation",
         draft_id=payload.draft_id,
         brand_id=payload.brand_id,
         campaign_id=payload.campaign_id,
@@ -636,6 +888,7 @@ def template_recommendation(
 
     return TemplateRecommendationResponse(
         context=context.to_schema(),
+        execution=_execution_metadata("deterministic"),
         total_candidates=len(scored),
         recommendations=[
             TemplateRecommendationItem(
@@ -664,6 +917,7 @@ def asset_recommendation(
     context = _resolve_context(
         db,
         user=user,
+        tool_name="asset_recommendation",
         draft_id=payload.draft_id,
         brand_id=payload.brand_id,
         campaign_id=payload.campaign_id,
@@ -708,6 +962,7 @@ def asset_recommendation(
 
     return AssetRecommendationResponse(
         context=context.to_schema(),
+        execution=_execution_metadata("deterministic"),
         total_candidates=len(scored),
         recommendations=[
             AssetRecommendationItem(
@@ -737,6 +992,7 @@ def review_feedback_to_revision_checklist(
     context = _resolve_context(
         db,
         user=user,
+        tool_name="review_feedback_to_revision_checklist",
         draft_id=payload.draft_id,
         brand_id=None,
         campaign_id=None,
@@ -747,6 +1003,52 @@ def review_feedback_to_revision_checklist(
     )
     review_thread = get_draft_review_thread(db, draft_id=payload.draft_id, user=user)
     commented_reviews = [review for review in review_thread.reviews if review.comment]
+    llm_attempt = _attempt_llm_structured_output(
+        schema_name="review_feedback_revision_checklist",
+        schema_model=LLMReviewFeedbackChecklistOutput,
+        instructions=_review_feedback_llm_instructions(limit=payload.limit),
+        input_payload=_review_feedback_llm_input(
+            context=context,
+            limit=payload.limit,
+            review_comments=[
+                {
+                    "action": review.action,
+                    "comment": _normalize_text(review.comment),
+                    "created_at": review.created_at,
+                }
+                for review in commented_reviews
+                if _normalize_text(review.comment)
+            ],
+        ),
+    )
+    if isinstance(llm_attempt.payload, LLMReviewFeedbackChecklistOutput):
+        return ReviewFeedbackToRevisionChecklistResponse(
+            context=context.to_schema(),
+            execution=llm_attempt.execution,
+            summary=llm_attempt.payload.summary,
+            checklist_items=llm_attempt.payload.checklist_items[: payload.limit],
+            preserved_strengths=_dedupe_preserve_order(llm_attempt.payload.preserved_strengths)[:5],
+            source_comment_count=len(commented_reviews),
+            blocker_count=sum(1 for review in commented_reviews if review.action == DraftReviewAction.REJECTED),
+        )
+
+    deterministic = _review_feedback_to_revision_checklist_deterministic(
+        context=context,
+        payload=payload,
+        commented_reviews=commented_reviews,
+    )
+    if llm_attempt.execution.mode == "deterministic":
+        return deterministic
+    return deterministic.model_copy(update={"execution": llm_attempt.execution})
+
+
+def _review_feedback_to_revision_checklist_deterministic(
+    *,
+    context: ResolvedDraftContext,
+    payload: ReviewFeedbackToRevisionChecklistRequest,
+    commented_reviews: list[Any],
+) -> ReviewFeedbackToRevisionChecklistResponse:
+    execution = _execution_metadata("deterministic")
     checklist_items: list[RevisionChecklistItem] = []
     preserved_strengths: list[str] = []
     seen_items: set[str] = set()
@@ -756,7 +1058,7 @@ def review_feedback_to_revision_checklist(
         if not comment_text:
             continue
 
-        if review.action == DraftReviewAction.approved:
+        if review.action == DraftReviewAction.APPROVED:
             preserved_strengths.append(_excerpt(comment_text, limit=160))
             continue
 
@@ -786,7 +1088,7 @@ def review_feedback_to_revision_checklist(
             RevisionChecklistItem(
                 item="Confirm the next revision focus before resubmitting.",
                 priority="medium",
-                source_action=commented_reviews[0].action if commented_reviews else DraftReviewAction.commented,
+                source_action=commented_reviews[0].action if commented_reviews else DraftReviewAction.COMMENTED,
                 source_excerpt=fallback_excerpt,
                 guidance="Use the review thread to capture concrete changes so the next cycle is traceable.",
             )
@@ -794,6 +1096,7 @@ def review_feedback_to_revision_checklist(
 
     return ReviewFeedbackToRevisionChecklistResponse(
         context=context.to_schema(),
+        execution=execution,
         summary=(
             f"Converted {len(commented_reviews)} review comments into "
             f"{len(checklist_items)} revision checklist items."
@@ -801,7 +1104,7 @@ def review_feedback_to_revision_checklist(
         checklist_items=checklist_items,
         preserved_strengths=_dedupe_preserve_order(preserved_strengths)[:5],
         source_comment_count=len(commented_reviews),
-        blocker_count=sum(1 for review in commented_reviews if review.action == DraftReviewAction.rejected),
+        blocker_count=sum(1 for review in commented_reviews if review.action == DraftReviewAction.REJECTED),
     )
 
 
@@ -826,9 +1129,9 @@ def _feedback_to_action_item(segment: str) -> str:
 
 
 def _priority_for_action(action: DraftReviewAction) -> str:
-    if action == DraftReviewAction.rejected:
+    if action == DraftReviewAction.REJECTED:
         return "high"
-    if action == DraftReviewAction.resubmitted:
+    if action == DraftReviewAction.RESUBMITTED:
         return "low"
     return "medium"
 

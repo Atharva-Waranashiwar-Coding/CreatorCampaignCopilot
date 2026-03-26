@@ -11,6 +11,7 @@ from app.models.campaign_milestone import CampaignMilestone
 from app.models.collaboration_comment import CollaborationComment
 from app.models.content_brief import ContentBrief
 from app.models.content_draft import ContentDraft
+from app.models.draft_helper_artifact import DraftHelperArtifact
 from app.models.content_template import ContentTemplate
 from app.models.draft_review import DraftReview
 from app.models.draft_version import DraftVersion
@@ -35,6 +36,7 @@ __all__ = [
     "CollaborationComment",
     "ContentBrief",
     "ContentDraft",
+    "DraftHelperArtifact",
     "ContentTemplate",
     "DraftReview",
     "DraftVersion",

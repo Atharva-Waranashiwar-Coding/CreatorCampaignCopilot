@@ -7,10 +7,14 @@ import { ApiError, apiRequest } from "../../lib/api";
 import { formatActionLabel, formatDateTime } from "../../lib/format";
 import { queryClient } from "../../lib/query-client";
 import type {
+  AdvancedToolExecution,
   AssetRecommendationResponse,
   BrandVoiceValidatorResponse,
   ContentDraft,
   CrossChannelAdaptationResponse,
+  DraftHelperArtifact,
+  HelperArtifactStatus,
+  HelperArtifactType,
   ReviewFeedbackToRevisionChecklistResponse,
   ToolUsageLog,
   TemplateRecommendationResponse,
@@ -63,6 +67,28 @@ export function AdvancedHelperWorkbench({
     void queryClient.invalidateQueries({ queryKey: ["helper-tools", "usage"] });
     void queryClient.invalidateQueries({ queryKey: ["helper-tools", "usage", "advanced", draft.id] });
   };
+
+  const saveArtifactMutation = useMutation({
+    mutationFn: (payload: {
+      tool_name: string;
+      artifact_type: HelperArtifactType;
+      title: string;
+      summary: string | null;
+      payload: Record<string, unknown>;
+      status?: HelperArtifactStatus;
+    }) =>
+      apiRequest<DraftHelperArtifact>(
+        `/drafts/${draft.id}/helper-artifacts`,
+        {
+          method: "POST",
+          body: JSON.stringify(payload),
+        },
+        token,
+      ),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["draft-helper-artifacts", draft.id] });
+    },
+  });
 
   const voiceMutation = useMutation({
     mutationFn: () =>
@@ -151,6 +177,7 @@ export function AdvancedHelperWorkbench({
           Run validation, adaptation, recommendation, and feedback-conversion helpers directly against the current draft.
           The saved draft only changes if you apply a result here and then use the standard save action above.
         </p>
+        <MutationError error={saveArtifactMutation.error} />
       </Card>
 
       <ToolCard
@@ -171,6 +198,7 @@ export function AdvancedHelperWorkbench({
               <Badge tone={voiceTone(voiceMutation.data.verdict)}>{voiceMutation.data.verdict}</Badge>
               <Badge tone="muted">{voiceMutation.data.score}/100</Badge>
             </div>
+            <ExecutionMeta execution={voiceMutation.data.execution} />
             <p className="text-sm text-foreground">{voiceMutation.data.summary}</p>
             <div className="grid gap-3">
               {voiceMutation.data.checks.map((check) => (
@@ -195,6 +223,21 @@ export function AdvancedHelperWorkbench({
                 </div>
               </div>
             ) : null}
+            <Button
+              variant="secondary"
+              disabled={saveArtifactMutation.isPending}
+              onClick={() =>
+                saveArtifactMutation.mutate({
+                  tool_name: "brand_voice_validator",
+                  artifact_type: "voice_validation",
+                  title: "Brand voice validation",
+                  summary: voiceMutation.data.summary,
+                  payload: voiceMutation.data as unknown as Record<string, unknown>,
+                })
+              }
+            >
+              {saveArtifactMutation.isPending ? "Saving..." : "Save validation"}
+            </Button>
           </div>
         ) : null}
       </ToolCard>
@@ -230,6 +273,7 @@ export function AdvancedHelperWorkbench({
               <Badge tone="muted">to</Badge>
               <Badge>{adaptationResult.target_platform}</Badge>
             </div>
+            <ExecutionMeta execution={adaptationResult.execution} />
             <div className="rounded-[1.2rem] border border-border bg-slate-50/80 p-4">
               <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">Suggested adaptation</p>
               {adaptationResult.adapted_title ? (
@@ -250,6 +294,21 @@ export function AdvancedHelperWorkbench({
               </Button>
               <Button variant="secondary" onClick={() => onInsertBodySnippet(adaptationResult.adapted_body)}>
                 Insert body below draft
+              </Button>
+              <Button
+                variant="secondary"
+                disabled={saveArtifactMutation.isPending}
+                onClick={() =>
+                  saveArtifactMutation.mutate({
+                    tool_name: "cross_channel_adaptation",
+                    artifact_type: "cross_channel_adaptation",
+                    title: `Cross-channel adaptation for ${adaptationResult.target_platform}`,
+                    summary: `Adapted ${adaptationResult.source_platform} draft for ${adaptationResult.target_platform}.`,
+                    payload: adaptationResult as unknown as Record<string, unknown>,
+                  })
+                }
+              >
+                {saveArtifactMutation.isPending ? "Saving..." : "Save adaptation"}
               </Button>
             </div>
             {adaptationResult.adaptation_notes.length ? (
@@ -297,6 +356,7 @@ export function AdvancedHelperWorkbench({
 
         {templateMutation.data ? (
           <div className="mt-5 space-y-3">
+            <ExecutionMeta execution={templateMutation.data.execution} />
             {templateMutation.data.recommendations.length ? (
               templateMutation.data.recommendations.map((item) => (
                 <div key={item.id} className="rounded-[1.2rem] border border-border bg-white/80 p-4">
@@ -322,6 +382,21 @@ export function AdvancedHelperWorkbench({
             ) : (
               <p className="text-sm text-muted-foreground">No templates are available for this brand yet.</p>
             )}
+            <Button
+              variant="secondary"
+              disabled={saveArtifactMutation.isPending}
+              onClick={() =>
+                saveArtifactMutation.mutate({
+                  tool_name: "template_recommendation",
+                  artifact_type: "template_recommendations",
+                  title: "Template recommendations",
+                  summary: `Saved ${templateMutation.data.recommendations.length} ranked template recommendations.`,
+                  payload: templateMutation.data as unknown as Record<string, unknown>,
+                })
+              }
+            >
+              {saveArtifactMutation.isPending ? "Saving..." : "Save recommendations"}
+            </Button>
           </div>
         ) : null}
       </ToolCard>
@@ -340,6 +415,7 @@ export function AdvancedHelperWorkbench({
 
         {assetMutation.data ? (
           <div className="mt-5 space-y-3">
+            <ExecutionMeta execution={assetMutation.data.execution} />
             {assetMutation.data.recommendations.length ? (
               assetMutation.data.recommendations.map((asset) => (
                 <div key={asset.id} className="rounded-[1.2rem] border border-border bg-white/80 p-4">
@@ -371,6 +447,21 @@ export function AdvancedHelperWorkbench({
             ) : (
               <p className="text-sm text-muted-foreground">No campaign assets are available to rank yet.</p>
             )}
+            <Button
+              variant="secondary"
+              disabled={saveArtifactMutation.isPending}
+              onClick={() =>
+                saveArtifactMutation.mutate({
+                  tool_name: "asset_recommendation",
+                  artifact_type: "asset_recommendations",
+                  title: "Asset recommendations",
+                  summary: `Saved ${assetMutation.data.recommendations.length} ranked asset recommendations.`,
+                  payload: assetMutation.data as unknown as Record<string, unknown>,
+                })
+              }
+            >
+              {saveArtifactMutation.isPending ? "Saving..." : "Save recommendations"}
+            </Button>
           </div>
         ) : null}
       </ToolCard>
@@ -389,6 +480,7 @@ export function AdvancedHelperWorkbench({
 
         {checklistMutation.data ? (
           <div className="mt-5 space-y-4">
+            <ExecutionMeta execution={checklistMutation.data.execution} />
             <p className="text-sm text-foreground">{checklistMutation.data.summary}</p>
             <div className="space-y-3">
               {checklistMutation.data.checklist_items.map((item) => (
@@ -415,6 +507,21 @@ export function AdvancedHelperWorkbench({
                 </div>
               </div>
             ) : null}
+            <Button
+              variant="secondary"
+              disabled={saveArtifactMutation.isPending}
+              onClick={() =>
+                saveArtifactMutation.mutate({
+                  tool_name: "review_feedback_to_revision_checklist",
+                  artifact_type: "revision_checklist",
+                  title: "Revision checklist",
+                  summary: checklistMutation.data.summary,
+                  payload: checklistMutation.data as unknown as Record<string, unknown>,
+                })
+              }
+            >
+              {saveArtifactMutation.isPending ? "Saving..." : "Save checklist"}
+            </Button>
           </div>
         ) : null}
       </ToolCard>
@@ -506,6 +613,32 @@ function MutationError({ error }: { error: unknown }) {
     <p className="mt-5 rounded-[1.2rem] border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
       {error.message}
     </p>
+  );
+}
+
+function ExecutionMeta({ execution }: { execution: AdvancedToolExecution }) {
+  const tone =
+    execution.mode === "llm" ? "success" : execution.mode === "deterministic_fallback" ? "warning" : "muted";
+  const label =
+    execution.mode === "llm"
+      ? "LLM-backed"
+      : execution.mode === "deterministic_fallback"
+        ? "LLM fallback"
+        : "Deterministic";
+
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge tone={tone}>{label}</Badge>
+        {execution.provider_name ? <Badge tone="muted">{execution.provider_name}</Badge> : null}
+        {execution.model ? <Badge tone="muted">{execution.model}</Badge> : null}
+      </div>
+      {execution.fallback_reason ? (
+        <p className="rounded-[1rem] border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          {execution.fallback_reason}
+        </p>
+      ) : null}
+    </div>
   );
 }
 

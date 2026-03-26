@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.models.user import User
+from app.services.access import HelperRateLimitError
 from app.tools.advanced_schemas import (
     AssetRecommendationRequest,
     AssetRecommendationResponse,
@@ -50,6 +51,13 @@ router = APIRouter()
 
 
 def _raise_service_error(exc: Exception) -> None:
+    if isinstance(exc, HelperRateLimitError):
+        headers = {"Retry-After": str(exc.retry_after_seconds)} if exc.retry_after_seconds is not None else None
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=str(exc),
+            headers=headers,
+        ) from exc
     if isinstance(exc, PermissionError):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     if isinstance(exc, LookupError):

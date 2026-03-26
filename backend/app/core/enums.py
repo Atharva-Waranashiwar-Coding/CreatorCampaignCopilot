@@ -104,3 +104,21 @@ class SubscriptionStatus(StrEnum):
     ACTIVE = "active"
     PAST_DUE = "past_due"
     CANCELED = "canceled"
+
+
+class HelperArtifactStatus(StrEnum):
+    SAVED = "saved"
+    APPLIED = "applied"
+    DISMISSED = "dismissed"
+
+
+class HelperArtifactType(StrEnum):
+    BRAND_GUIDELINES = "brand_guidelines"
+    TEMPLATE_SNAPSHOT = "template_snapshot"
+    VALIDATION_REPORT = "validation_report"
+    REVIEW_SUMMARY = "review_summary"
+    VOICE_VALIDATION = "voice_validation"
+    CROSS_CHANNEL_ADAPTATION = "cross_channel_adaptation"
+    TEMPLATE_RECOMMENDATIONS = "template_recommendations"
+    ASSET_RECOMMENDATIONS = "asset_recommendations"
+    REVISION_CHECKLIST = "revision_checklist"

@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.models.user import User
 from app.schemas.campaign_asset import CampaignAssetRead
 from app.schemas.content_template import ContentTemplateRead
+from app.services.access import assert_helper_tool_plan_access
 from app.services.assets import list_campaign_assets
 from app.services.brands import get_brand
 from app.services.campaigns import get_campaign
@@ -87,8 +88,21 @@ def _excerpt(value: str | None, *, limit: int = 180) -> str:
     return f"{normalized[: limit - 3].rstrip()}..."
 
 
-def fetch_brand_guidelines(db: Session, *, brand_id: int, user: User) -> BrandGuidelinesResponse:
+def fetch_brand_guidelines(
+    db: Session,
+    *,
+    brand_id: int,
+    user: User,
+    enforce_tool_access: bool = True,
+) -> BrandGuidelinesResponse:
     brand = get_brand(db, brand_id=brand_id, user=user)
+    if enforce_tool_access:
+        assert_helper_tool_plan_access(
+            db,
+            brand_id=brand.id,
+            user_id=user.id,
+            tool_name="fetch_brand_guidelines",
+        )
     guidance_points = [
         _normalize_text(brand.guidelines_summary),
         _normalize_text(brand.tone_of_voice),
@@ -132,6 +146,14 @@ def fetch_templates(
     payload: FetchTemplatesRequest,
     user: User,
 ) -> FetchTemplatesResponse:
+    if payload.brand_id is None:
+        raise ValueError("brand_id is required for helper template retrieval.")
+    assert_helper_tool_plan_access(
+        db,
+        brand_id=payload.brand_id,
+        user_id=user.id,
+        tool_name="fetch_templates",
+    )
     templates = list_templates(
         db,
         user=user,
@@ -185,7 +207,18 @@ def validate_content_against_guidelines(
     payload: ValidateContentAgainstGuidelinesRequest,
     user: User,
 ) -> ValidateContentAgainstGuidelinesResponse:
-    brand = fetch_brand_guidelines(db, brand_id=payload.brand_id, user=user)
+    assert_helper_tool_plan_access(
+        db,
+        brand_id=payload.brand_id,
+        user_id=user.id,
+        tool_name="validate_content_against_guidelines",
+    )
+    brand = fetch_brand_guidelines(
+        db,
+        brand_id=payload.brand_id,
+        user=user,
+        enforce_tool_access=False,
+    )
     content_text = " ".join(part for part in [payload.title, payload.content_body] if part)
     content_keywords = set(_extract_keywords(content_text, limit=32))
     brand_keywords = _extract_keywords(
@@ -341,6 +374,12 @@ def retrieve_campaign_assets(
     user: User,
 ) -> RetrieveCampaignAssetsResponse:
     campaign = get_campaign(db, campaign_id=payload.campaign_id, user=user)
+    assert_helper_tool_plan_access(
+        db,
+        brand_id=campaign.brand_id,
+        user_id=user.id,
+        tool_name="retrieve_campaign_assets",
+    )
     assets = list_campaign_assets(db, campaign_id=payload.campaign_id, user=user)
     filtered = [
         asset
@@ -394,6 +433,12 @@ def summarize_review_feedback(
     user: User,
 ) -> SummarizeReviewFeedbackResponse:
     draft = get_draft(db, draft_id=payload.draft_id, user=user)
+    assert_helper_tool_plan_access(
+        db,
+        brand_id=draft.brand_id,
+        user_id=user.id,
+        tool_name="summarize_review_feedback",
+    )
     review_thread = get_draft_review_thread(db, draft_id=payload.draft_id, user=user)
     reviews_with_comments = [review for review in review_thread.reviews if review.comment]
     comment_summaries = [

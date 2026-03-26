@@ -11,16 +11,9 @@ from app.models.brand_membership import BrandMembership
 from app.models.tool_usage_log import ToolUsageLog
 from app.models.user import User
 from app.schemas.tool_usage_log import ToolUsageLogRead
+from app.tools.definitions import ADVANCED_HELPER_TOOL_NAMES
 
 logger = logging.getLogger(__name__)
-
-ADVANCED_HELPER_TOOL_NAMES = {
-    "brand_voice_validator",
-    "cross_channel_adaptation",
-    "template_recommendation",
-    "asset_recommendation",
-    "review_feedback_to_revision_checklist",
-}
 
 
 def _compact_value(value: Any, *, max_string_length: int = 280, max_items: int = 12) -> Any:

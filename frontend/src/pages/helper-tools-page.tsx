@@ -1,19 +1,44 @@
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { PageHeader } from "../components/shared/page-header";
 import { Badge } from "../components/ui/badge";
 import { Card } from "../components/ui/card";
+import { Select } from "../components/ui/select";
 import { useAuthStore } from "../features/auth/auth-store";
 import { ApiError, apiRequest } from "../lib/api";
 import { formatActionLabel, formatDateTime } from "../lib/format";
-import type { HelperToolCatalog, ToolUsageLog } from "../lib/types";
+import type { Brand, BrandBillingSnapshot, HelperToolCatalog, ToolUsageLog, UsageMetric } from "../lib/types";
 
 export function HelperToolsPage() {
   const token = useAuthStore((state) => state.token);
+  const [selectedBrandId, setSelectedBrandId] = useState<number | null>(null);
+
+  const brandsQuery = useQuery({
+    queryKey: ["brands"],
+    queryFn: () => apiRequest<Brand[]>("/brands", {}, token),
+  });
+
+  useEffect(() => {
+    if (!brandsQuery.data?.length) {
+      setSelectedBrandId(null);
+      return;
+    }
+
+    if (!selectedBrandId || !brandsQuery.data.some((brand) => brand.id === selectedBrandId)) {
+      setSelectedBrandId(brandsQuery.data[0].id);
+    }
+  }, [brandsQuery.data, selectedBrandId]);
 
   const catalogQuery = useQuery({
     queryKey: ["helper-tools", "catalog"],
     queryFn: () => apiRequest<HelperToolCatalog>("/tools/catalog", {}, token),
+  });
+
+  const billingQuery = useQuery({
+    queryKey: ["brand-billing", selectedBrandId],
+    queryFn: () => apiRequest<BrandBillingSnapshot>(`/brands/${selectedBrandId}/billing`, {}, token),
+    enabled: Boolean(selectedBrandId),
   });
 
   const usageQuery = useQuery({
@@ -22,7 +47,11 @@ export function HelperToolsPage() {
   });
 
   const catalog = catalogQuery.data;
+  const billingSnapshot = billingQuery.data;
   const usage = usageQuery.data ?? [];
+  const helperUsage = (billingSnapshot?.usage ?? []).filter((metric) =>
+    ["monthly_helper_runs", "monthly_advanced_helper_runs", "saved_helper_artifacts"].includes(metric.key),
+  );
 
   return (
     <div>
@@ -31,14 +60,25 @@ export function HelperToolsPage() {
         title="Internal MCP helper layer visibility"
         description="Inspect the helper tools exposed through FastAPI, confirm MCP availability, and review recent advanced helper executions across brands you can access."
         actions={(
-          <>
+          <div className="flex flex-wrap gap-3">
+            <Select
+              className="min-w-[220px]"
+              value={selectedBrandId ? String(selectedBrandId) : ""}
+              onChange={(event) => setSelectedBrandId(Number(event.target.value))}
+            >
+              {brandsQuery.data?.map((brand) => (
+                <option key={brand.id} value={brand.id}>
+                  {brand.name}
+                </option>
+              ))}
+            </Select>
             <Badge tone={catalog?.mcp_helpers_enabled ? "success" : "warning"}>
               {catalog?.mcp_helpers_enabled ? "MCP enabled" : "MCP disabled"}
             </Badge>
             <Badge tone={catalog?.mcp_runtime_available ? "success" : "warning"}>
               {catalog?.mcp_runtime_available ? "Runtime available" : "Package missing"}
             </Badge>
-          </>
+          </div>
         )}
       />
 
@@ -65,10 +105,14 @@ export function HelperToolsPage() {
                   >
                     <div className="flex flex-wrap items-center gap-3">
                       <Badge>{tool.mcp_tool_name}</Badge>
+                      <Badge tone={tool.is_advanced ? "warning" : "muted"}>
+                        {tool.is_advanced ? "Advanced AI" : "Core helper"}
+                      </Badge>
                       <Badge tone={tool.mcp_exposed ? "success" : "warning"}>
                         {tool.mcp_exposed ? "MCP exposed" : "REST only"}
                       </Badge>
                       <Badge tone="muted">{tool.target_entity_type}</Badge>
+                      <Badge tone="muted">{tool.required_feature_key}</Badge>
                     </div>
                     <p className="mt-4 text-sm leading-6 text-muted-foreground">{tool.description}</p>
                     <div className="mt-4 grid gap-4 md:grid-cols-2">
@@ -97,6 +141,69 @@ export function HelperToolsPage() {
         </div>
 
         <div className="space-y-6">
+          <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Plan gating</p>
+                <h2 className="mt-2 text-2xl font-semibold tracking-tight">Helper access and burst controls</h2>
+              </div>
+              {billingSnapshot ? <Badge tone="muted">{billingSnapshot.current_plan.name}</Badge> : null}
+            </div>
+
+            <QueryError error={brandsQuery.error} />
+            <QueryError error={billingQuery.error} />
+
+            {billingQuery.isLoading ? (
+              <p className="mt-6 text-sm text-muted-foreground">Loading helper access policy...</p>
+            ) : billingSnapshot ? (
+              <div className="mt-6 space-y-4">
+                <div className="flex flex-wrap gap-3">
+                  <Badge tone={billingSnapshot.helper_policy.helper_tools_enabled ? "success" : "warning"}>
+                    {billingSnapshot.helper_policy.helper_tools_enabled ? "Helper tools enabled" : "Helper tools locked"}
+                  </Badge>
+                  <Badge tone={billingSnapshot.helper_policy.advanced_ai_helpers_enabled ? "success" : "warning"}>
+                    {billingSnapshot.helper_policy.advanced_ai_helpers_enabled ? "Advanced AI enabled" : "Advanced AI locked"}
+                  </Badge>
+                  <Badge tone="muted">{billingSnapshot.current_user_role}</Badge>
+                </div>
+
+                <div className="grid gap-4">
+                  <PolicyBlock
+                    label="Monthly allowances"
+                    lines={helperUsage.length
+                      ? helperUsage.map((metric) => formatHelperMetric(metric))
+                      : ["No helper usage meters are available for this brand yet."]}
+                  />
+                  <PolicyBlock
+                    label="Burst throttles"
+                    lines={[
+                      formatBurstPolicy(
+                        "All helper runs",
+                        billingSnapshot.helper_policy.helper_run_burst_limit,
+                        billingSnapshot.helper_policy.helper_run_burst_window_minutes,
+                      ),
+                      formatBurstPolicy(
+                        "Advanced AI helper runs",
+                        billingSnapshot.helper_policy.advanced_helper_run_burst_limit,
+                        billingSnapshot.helper_policy.advanced_helper_run_burst_window_minutes,
+                      ),
+                    ]}
+                  />
+                </div>
+
+                {billingSnapshot.upgrade_prompts.length ? (
+                  <div className="space-y-2 rounded-[1.25rem] border border-amber-200 bg-amber-50 p-4">
+                    {billingSnapshot.upgrade_prompts.slice(0, 2).map((prompt) => (
+                      <p key={prompt} className="text-sm text-amber-900">
+                        {prompt}
+                      </p>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+          </Card>
+
           <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -156,6 +263,27 @@ export function HelperToolsPage() {
             )}
           </Card>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function PolicyBlock({
+  label,
+  lines,
+}: {
+  label: string;
+  lines: string[];
+}) {
+  return (
+    <div className="rounded-[1.25rem] border border-border bg-slate-50/90 p-4">
+      <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">{label}</p>
+      <div className="mt-3 space-y-2">
+        {lines.map((line) => (
+          <p key={line} className="text-sm text-foreground">
+            {line}
+          </p>
+        ))}
       </div>
     </div>
   );
@@ -230,6 +358,20 @@ function truncateJson(value: Record<string, unknown> | null | undefined) {
     return text;
   }
   return `${text.slice(0, 597).trimEnd()}...`;
+}
+
+function formatHelperMetric(metric: UsageMetric) {
+  if (metric.limit === null) {
+    return `${metric.label}: ${metric.current} used with no monthly cap.`;
+  }
+  return `${metric.label}: ${metric.current}/${metric.limit} used, ${metric.remaining ?? 0} remaining.`;
+}
+
+function formatBurstPolicy(label: string, limit: number | null, windowMinutes: number) {
+  if (limit === null) {
+    return `${label}: no burst cap in the current ${windowMinutes}-minute window.`;
+  }
+  return `${label}: ${limit} allowed every ${windowMinutes} minutes.`;
 }
 
 function extractUsageSummary(item: ToolUsageLog) {

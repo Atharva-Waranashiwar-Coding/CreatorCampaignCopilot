@@ -6,6 +6,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { EditorToolbar } from "../components/draft-editor/editor-toolbar";
 import { PlatformPreview } from "../components/draft-preview/platform-preview";
 import { AdvancedHelperWorkbench } from "../components/helper-tools/advanced-helper-workbench";
+import { CoreHelperWorkbench } from "../components/helper-tools/core-helper-workbench";
 import { AssignmentPanel } from "../components/collaboration/assignment-panel";
 import { ThreadedCommentsCard } from "../components/collaboration/threaded-comments-card";
 import { PageHeader } from "../components/shared/page-header";
@@ -412,6 +413,8 @@ export function DraftDetailPage() {
               title: form.title,
             }}
           />
+
+          <CoreHelperWorkbench draft={draft} form={form} />
 
           <AdvancedHelperWorkbench
             draft={draft}

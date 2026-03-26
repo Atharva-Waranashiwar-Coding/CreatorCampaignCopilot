@@ -59,3 +59,9 @@ class ContentDraft(TimestampMixin, Base):
         lazy="selectin",
         order_by="Assignment.created_at.desc()",
     )
+    helper_artifacts: Mapped[list["DraftHelperArtifact"]] = relationship(
+        back_populates="draft",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+        order_by="DraftHelperArtifact.updated_at.desc()",
+    )
