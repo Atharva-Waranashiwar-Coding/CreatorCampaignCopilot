@@ -318,191 +318,201 @@ export function CampaignsPage() {
           </form>
         </Card>
 
-        <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Directory</p>
-              <h2 className="mt-2 text-2xl font-semibold tracking-tight">Campaign list</h2>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Select a campaign to edit the fundamentals below, or jump straight into the full workspace.
-              </p>
-            </div>
-            {selectedCampaign ? <Badge>{selectedCampaign.name}</Badge> : null}
-          </div>
-
-          <div className="mt-5 space-y-3">
-            {campaignsQuery.data?.length ? (
-              campaignsQuery.data.map((campaign) => (
-                <button
-                  key={campaign.id}
-                  className={[
-                    "w-full rounded-[1.25rem] border px-4 py-4 text-left transition",
-                    selectedCampaignId === campaign.id
-                      ? "border-primary bg-primary/5"
-                      : "border-border bg-white/80 hover:bg-white",
-                  ].join(" ")}
-                  onClick={() => setSelectedCampaignId(campaign.id)}
-                  type="button"
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-4">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-3">
-                        <h3 className="text-base font-semibold">{campaign.name}</h3>
-                        <Badge tone={campaign.status === "active" ? "success" : "muted"}>{campaign.status}</Badge>
-                        <Badge tone="muted">{campaign.draft_count} drafts</Badge>
-                        {campaign.brief_id ? <Badge tone="success">brief ready</Badge> : <Badge tone="warning">brief missing</Badge>}
-                      </div>
-                      <p className="mt-2 text-sm text-muted-foreground">
-                        {campaign.brand_name} · {campaign.project_name}
-                      </p>
-                      <p className="mt-3 text-sm text-muted-foreground">
-                        {campaign.objective ?? "No objective set yet."}
-                      </p>
-                      <p className="mt-3 text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                        {formatDate(campaign.start_date)} to {formatDate(campaign.end_date)}
-                      </p>
-                    </div>
-
-                    <Link
-                      className="inline-flex min-h-11 items-center rounded-[1rem] border border-primary/10 bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-[0_12px_26px_-18px_rgba(15,118,135,0.9)]"
-                      onClick={(event) => event.stopPropagation()}
-                      to={`/campaigns/${campaign.id}`}
-                    >
-                      Open workspace
-                    </Link>
-                  </div>
-                </button>
-              ))
-            ) : (
-              <p className="rounded-[1.25rem] border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
-                No campaigns found for the current filters.
-              </p>
-            )}
-          </div>
-        </Card>
-
-        {selectedCampaign ? (
+        <div className="grid gap-6 xl:grid-cols-[0.98fr_1.02fr]">
           <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
-            <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Selected campaign</p>
-                <h2 className="mt-2 text-2xl font-semibold tracking-tight">{selectedCampaign.name}</h2>
+                <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Directory</p>
+                <h2 className="mt-2 text-2xl font-semibold tracking-tight">Campaign list</h2>
                 <p className="mt-2 text-sm text-muted-foreground">
-                  {selectedCampaign.brand_name} · {selectedCampaign.project_name}
+                  Select a campaign to edit the fundamentals beside the list, or jump straight into the full workspace.
                 </p>
               </div>
-              <Badge tone={selectedCampaign.status === "active" ? "success" : "muted"}>
-                {selectedCampaign.status}
-              </Badge>
+              {selectedCampaign ? <Badge>{selectedCampaign.name}</Badge> : null}
             </div>
 
-            <div className="mt-4 flex flex-wrap gap-3">
-              <Badge tone="muted">{selectedCampaign.draft_count} drafts</Badge>
-              {selectedCampaign.brief_id ? <Badge tone="success">brief ready</Badge> : <Badge tone="warning">brief missing</Badge>}
-              <Link
-                className="inline-flex items-center rounded-[1rem] border border-primary/10 bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-[0_12px_26px_-18px_rgba(15,118,135,0.9)]"
-                to={`/campaigns/${selectedCampaign.id}`}
-              >
-                Open workspace
-              </Link>
+            <div className="mt-5 space-y-3">
+              {campaignsQuery.data?.length ? (
+                campaignsQuery.data.map((campaign) => (
+                  <button
+                    key={campaign.id}
+                    className={[
+                      "w-full rounded-[1.25rem] border px-4 py-4 text-left transition",
+                      selectedCampaignId === campaign.id
+                        ? "border-primary bg-primary/5"
+                        : "border-border bg-white/80 hover:bg-white",
+                    ].join(" ")}
+                    onClick={() => setSelectedCampaignId(campaign.id)}
+                    type="button"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-4">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-3">
+                          <h3 className="text-base font-semibold">{campaign.name}</h3>
+                          <Badge tone={campaign.status === "active" ? "success" : "muted"}>{campaign.status}</Badge>
+                          <Badge tone="muted">{campaign.draft_count} drafts</Badge>
+                          {campaign.brief_id ? <Badge tone="success">brief ready</Badge> : <Badge tone="warning">brief missing</Badge>}
+                        </div>
+                        <p className="mt-2 text-sm text-muted-foreground">
+                          {campaign.brand_name} · {campaign.project_name}
+                        </p>
+                        <p className="mt-3 text-sm text-muted-foreground">
+                          {campaign.objective ?? "No objective set yet."}
+                        </p>
+                        <p className="mt-3 text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                          {formatDate(campaign.start_date)} to {formatDate(campaign.end_date)}
+                        </p>
+                      </div>
+
+                      <Link
+                        className="inline-flex min-h-11 items-center rounded-[1rem] border border-primary/10 bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-[0_12px_26px_-18px_rgba(15,118,135,0.9)]"
+                        onClick={(event) => event.stopPropagation()}
+                        to={`/campaigns/${campaign.id}`}
+                      >
+                        Open workspace
+                      </Link>
+                    </div>
+                  </button>
+                ))
+              ) : (
+                <p className="rounded-[1.25rem] border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
+                  No campaigns found for the current filters.
+                </p>
+              )}
             </div>
-
-            <form
-              className="mt-5 space-y-4"
-              onSubmit={(event) => {
-                event.preventDefault();
-                updateMutation.mutate();
-              }}
-            >
-              <Field label="Campaign name">
-                <Input
-                  value={editForm.name}
-                  onChange={(event) => setEditForm((current) => ({ ...current, name: event.target.value }))}
-                />
-              </Field>
-              <Field label="Objective">
-                <Textarea
-                  value={editForm.objective}
-                  onChange={(event) =>
-                    setEditForm((current) => ({ ...current, objective: event.target.value }))
-                  }
-                />
-              </Field>
-              <Field label="Audience">
-                <Textarea
-                  value={editForm.audience}
-                  onChange={(event) =>
-                    setEditForm((current) => ({ ...current, audience: event.target.value }))
-                  }
-                />
-              </Field>
-              <div className="grid gap-4 md:grid-cols-3">
-                <Field label="Type">
-                  <Input
-                    value={editForm.campaign_type}
-                    onChange={(event) =>
-                      setEditForm((current) => ({ ...current, campaign_type: event.target.value }))
-                    }
-                  />
-                </Field>
-                <Field label="Start date">
-                  <Input
-                    type="date"
-                    value={editForm.start_date}
-                    onChange={(event) =>
-                      setEditForm((current) => ({ ...current, start_date: event.target.value }))
-                    }
-                  />
-                </Field>
-                <Field label="End date">
-                  <Input
-                    type="date"
-                    value={editForm.end_date}
-                    onChange={(event) =>
-                      setEditForm((current) => ({ ...current, end_date: event.target.value }))
-                    }
-                  />
-                </Field>
-              </div>
-              <Field label="Status">
-                <Select
-                  value={editForm.status}
-                  onChange={(event) =>
-                    setEditForm((current) => ({
-                      ...current,
-                      status: event.target.value as CampaignStatus,
-                    }))
-                  }
-                >
-                  {campaignStatusOptions.map((status) => (
-                    <option key={status} value={status}>
-                      {status}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-
-              <MutationFeedback error={updateMutation.error || deleteMutation.error} />
-              <div className="flex flex-wrap gap-3">
-                <Button disabled={updateMutation.isPending} type="submit">
-                  {updateMutation.isPending ? "Saving..." : "Save changes"}
-                </Button>
-                <Button
-                  disabled={deleteMutation.isPending}
-                  onClick={() => {
-                    if (window.confirm(`Delete ${selectedCampaign.name}?`)) {
-                      deleteMutation.mutate();
-                    }
-                  }}
-                  type="button"
-                  variant="danger"
-                >
-                  {deleteMutation.isPending ? "Deleting..." : "Delete campaign"}
-                </Button>
-              </div>
-            </form>
           </Card>
-        ) : null}
+
+          <Card className="border-white/70 bg-white/85 p-6 shadow-xl shadow-slate-900/5">
+            {selectedCampaign ? (
+              <>
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">Selected campaign</p>
+                    <h2 className="mt-2 text-2xl font-semibold tracking-tight">{selectedCampaign.name}</h2>
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      {selectedCampaign.brand_name} · {selectedCampaign.project_name}
+                    </p>
+                  </div>
+                  <Badge tone={selectedCampaign.status === "active" ? "success" : "muted"}>
+                    {selectedCampaign.status}
+                  </Badge>
+                </div>
+
+                <div className="mt-4 flex flex-wrap gap-3">
+                  <Badge tone="muted">{selectedCampaign.draft_count} drafts</Badge>
+                  {selectedCampaign.brief_id ? <Badge tone="success">brief ready</Badge> : <Badge tone="warning">brief missing</Badge>}
+                  <Link
+                    className="inline-flex items-center rounded-[1rem] border border-primary/10 bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-[0_12px_26px_-18px_rgba(15,118,135,0.9)]"
+                    to={`/campaigns/${selectedCampaign.id}`}
+                  >
+                    Open workspace
+                  </Link>
+                </div>
+
+                <form
+                  className="mt-5 space-y-4"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    updateMutation.mutate();
+                  }}
+                >
+                  <Field label="Campaign name">
+                    <Input
+                      value={editForm.name}
+                      onChange={(event) => setEditForm((current) => ({ ...current, name: event.target.value }))}
+                    />
+                  </Field>
+                  <Field label="Objective">
+                    <Textarea
+                      value={editForm.objective}
+                      onChange={(event) =>
+                        setEditForm((current) => ({ ...current, objective: event.target.value }))
+                      }
+                    />
+                  </Field>
+                  <Field label="Audience">
+                    <Textarea
+                      value={editForm.audience}
+                      onChange={(event) =>
+                        setEditForm((current) => ({ ...current, audience: event.target.value }))
+                      }
+                    />
+                  </Field>
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <Field label="Type">
+                      <Input
+                        value={editForm.campaign_type}
+                        onChange={(event) =>
+                          setEditForm((current) => ({ ...current, campaign_type: event.target.value }))
+                        }
+                      />
+                    </Field>
+                    <Field label="Start date">
+                      <Input
+                        type="date"
+                        value={editForm.start_date}
+                        onChange={(event) =>
+                          setEditForm((current) => ({ ...current, start_date: event.target.value }))
+                        }
+                      />
+                    </Field>
+                    <Field label="End date">
+                      <Input
+                        type="date"
+                        value={editForm.end_date}
+                        onChange={(event) =>
+                          setEditForm((current) => ({ ...current, end_date: event.target.value }))
+                        }
+                      />
+                    </Field>
+                  </div>
+                  <Field label="Status">
+                    <Select
+                      value={editForm.status}
+                      onChange={(event) =>
+                        setEditForm((current) => ({
+                          ...current,
+                          status: event.target.value as CampaignStatus,
+                        }))
+                      }
+                    >
+                      {campaignStatusOptions.map((status) => (
+                        <option key={status} value={status}>
+                          {status}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+
+                  <MutationFeedback error={updateMutation.error || deleteMutation.error} />
+                  <div className="flex flex-wrap gap-3">
+                    <Button disabled={updateMutation.isPending} type="submit">
+                      {updateMutation.isPending ? "Saving..." : "Save changes"}
+                    </Button>
+                    <Button
+                      disabled={deleteMutation.isPending}
+                      onClick={() => {
+                        if (window.confirm(`Delete ${selectedCampaign.name}?`)) {
+                          deleteMutation.mutate();
+                        }
+                      }}
+                      type="button"
+                      variant="danger"
+                    >
+                      {deleteMutation.isPending ? "Deleting..." : "Delete campaign"}
+                    </Button>
+                  </div>
+                </form>
+              </>
+            ) : (
+              <div className="flex h-full min-h-[320px] items-center justify-center rounded-[1.25rem] border border-dashed border-border bg-white/70 px-6 text-center">
+                <p className="max-w-sm text-sm leading-6 text-muted-foreground">
+                  Select a campaign from the directory to edit its core setup here.
+                </p>
+              </div>
+            )}
+          </Card>
+        </div>
       </div>
     </div>
   );
