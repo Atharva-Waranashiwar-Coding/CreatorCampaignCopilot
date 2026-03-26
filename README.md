@@ -1,56 +1,244 @@
 # Creator Campaign Copilot
 
-Phase 11 workspace for multi-brand campaign planning, configurable draft workflows, campaign milestones, dependency-aware board operations, campaign intelligence analytics, platform previews, collaboration workflows, advanced helper tools, MCP exposure, templates, and subscription-aware usage controls.
+Creator Campaign Copilot is a multi-brand campaign operations workspace for teams planning, producing, reviewing, scheduling, and improving creator or brand content across channels. Instead of splitting planning, drafts, approvals, collaboration, analytics, and helper tooling across disconnected products, it keeps the full campaign lifecycle inside one system.
 
-## Stack
+This repository currently reflects the Phase 11 implementation of the product: brand workspaces, projects, campaigns, briefs, flexible draft workflows, milestones, dependencies, reviews, collaboration, analytics, templates, billing controls, and optional MCP-assisted helper tools.
+
+## Product Overview
+
+### What the product does
+
+Creator Campaign Copilot is designed to help a marketing or content team answer four operational questions in one place:
+
+1. What are we launching, for which brand, and why?
+2. What content is in progress, blocked, under review, approved, or scheduled?
+3. Who owns the work, what feedback exists, and what is at risk?
+4. Which helper tools or analytics should we use to improve execution quality?
+
+### Who it is for
+
+- Brand and marketing leads managing multiple campaigns across one or more brands
+- Editors and content operators creating drafts, assets, and reusable templates
+- Reviewers approving or rejecting content with traceable feedback
+- Campaign managers coordinating launch readiness, milestone tracking, and assignments
+- Teams that want optional MCP-compatible helper tools without making AI tooling a hard dependency of the core workflow
+
+### Core product areas
+
+- Multi-brand workspace management with memberships and brand-level RBAC
+- Project and campaign planning with briefs, milestones, and dependencies
+- Draft production with configurable workflow stages, review loops, and version history
+- Campaign planning views across board, list, and calendar formats
+- Collaboration through threaded comments, mentions, assignments, and notifications
+- Operational analytics for campaign health, workload, approval performance, and content mix
+- Internal helper tools exposed through REST and optionally through MCP
+- Subscription and usage controls at the brand level
+
+## End-to-End Product Flow
+
+The product is intentionally structured around the way a campaign team actually works.
+
+1. A user creates an account and enters the workspace.
+2. The user creates or joins a brand workspace with role-based access.
+3. Inside a brand, the team creates projects that group related campaigns.
+4. Each campaign is created with dates, audience, objectives, and campaign metadata.
+5. The team writes the campaign brief, adds reference material, and defines launch expectations.
+6. The brand configures its preferred draft workflow when the default stage model does not match the team process.
+7. Campaign milestones are tracked and dependencies are added so blocked work is explicit.
+8. Drafts are created for specific platforms and content types.
+9. Editors work in the draft detail experience, use quick writing tools, and preview copy in channel-specific layouts.
+10. Reviewers comment, approve, or reject drafts, and editors resubmit after revisions.
+11. Assignments, mentions, and notifications keep ownership and follow-up visible.
+12. Approved work is scheduled, surfaced on the calendar, and tracked against campaign timelines.
+13. The dashboard highlights campaign health, workload pressure, bottlenecks, review turnaround, and content mix trends.
+14. Helper tools can validate tone, adapt copy across channels, recommend templates or assets, and convert review feedback into structured revision checklists.
+
+## Main User Journeys
+
+### 1. Workspace setup
+
+- Register or sign in
+- Create a brand
+- Add members with roles: `owner`, `admin`, `editor`, `reviewer`, `viewer`
+- Review plan and usage posture from billing
+
+### 2. Campaign planning
+
+- Create a project inside a brand
+- Create one or more campaigns inside the project
+- Add a campaign brief
+- Define milestones and milestone target dates
+- Add dependencies between milestones or workflow stages
+
+### 3. Content production
+
+- Create drafts for LinkedIn, Instagram, email, article/blog, and other channel/content combinations
+- Move drafts through the brand workflow
+- Save versions and maintain revision context
+- Reuse templates and campaign assets
+
+### 4. Review and collaboration
+
+- Submit drafts for review
+- Add review comments and threaded discussion
+- Mention teammates using `@email`
+- Approve, reject, revise, and resubmit
+- Assign campaigns, drafts, or review tasks to specific users
+
+### 5. Launch and optimization
+
+- Schedule approved work
+- Use board, list, and calendar views to manage execution
+- Watch due-soon reminders and notifications
+- Review campaign health scoring and operational analytics
+- Use advanced helper tools when extra drafting support or validation is needed
+
+## Implemented Product Capabilities
+
+### Workspace and access
+
+- Email and password authentication with JWT access tokens
+- Brand-scoped memberships and permissions
+- Project and campaign CRUD
+- Audit logging for key events
+
+### Planning and execution
+
+- Campaign briefs with structured messaging inputs
+- Brand-level configurable draft workflows with custom labels, colors, transitions, and initial stages
+- Campaign milestones for key readiness checkpoints
+- Dependency modeling between milestones and draft stages
+- Blocked-state visibility in workflow and planner interactions
+
+### Draft operations
+
+- Draft CRUD mapped to the brand workflow
+- Review queue and draft review history
+- Approval, rejection, and editor resubmission loop
+- Draft versions and scheduled publish timing
+- Platform previews for LinkedIn, Instagram captions, email, and article/blog layouts
+
+### Collaboration
+
+- Threaded comments on campaigns and drafts
+- Mention parsing using `@email`
+- Assignments for campaigns, drafts, and review tasks
+- Notification center for mentions, review events, assignments, and due-soon reminders
+- Collaboration-aware campaign activity feed
+
+### Intelligence and reuse
+
+- Reusable content templates
+- Dashboard analytics for campaigns, drafts, reviews, schedule, workload, and content mix
+- Campaign health scoring with transparent penalty factors
+- Helper tool catalog and execution visibility
+- Advanced content-operation helpers for tone validation, cross-channel adaptation, template recommendation, asset recommendation, and revision checklist generation
+
+### Billing and controls
+
+- Brand plans and subscriptions
+- Usage metering and upgrade prompts
+- Brand-level checks for members, active campaigns, scheduled work, and template counts
+
+## Product Design Principles
+
+The project design follows a few practical rules:
+
+- Multi-brand first: all meaningful operational data is scoped to brands and memberships.
+- Workflow before automation: content movement, review rules, and blocked states stay explicit even when helper tools are available.
+- Human accountability stays visible: assignments, reviewers, comments, and audit events remain first-class.
+- AI is optional, not foundational: MCP and helper tools extend the product but do not replace the base workflow.
+- Analytics are operational, not vanity metrics: the dashboard emphasizes health, bottlenecks, review speed, and workload.
+- Configuration lives close to execution: workflow rules, plans, and permissions are attached to the brand instead of being global assumptions.
+
+## System Design
+
+### Application architecture
 
 - Frontend: React, TypeScript, Vite, Tailwind CSS, TanStack Query, Zustand
 - Backend: FastAPI, Pydantic, SQLAlchemy, Alembic
 - Database: PostgreSQL
-- Dev environment: Docker Compose
+- Local development: Docker Compose
 
-## Phase 11 scope
+### Runtime shape
 
-- Email/password auth scaffold with JWT access tokens
-- Core backend modules for users, brands, memberships, projects, campaigns, and audit logs
-- Brand-level RBAC roles: `owner`, `admin`, `editor`, `reviewer`, `viewer`
-- Frontend shell with dashboard, brands, projects, and campaigns pages
-- CRUD flows for brands, projects, and campaigns
-- Membership listing and invite-ready structure
-- Content brief model and CRUD, one brief per campaign
-- Brand-level configurable draft workflow schemas with custom stage labels, colors, transitions, and initial stages
-- Content draft model and CRUD mapped onto brand-specific workflow stages instead of a fixed global status list
-- Draft review model and APIs with reviewer comments
-- Approval and rejection workflow with role checks and editor resubmission loop
-- Campaign workspace overview, review queue, activity timeline, draft detail workflow, and search/filtering
-- Campaign assets, draft versions, and calendar scheduling
-- Default campaign milestone tracking for brief approval, first drafts ready, review completion, launch readiness, and campaign completion
-- Campaign dependency modeling between milestones and draft stages, including blocked-state handling in workflow moves
-- Brand plan catalog and subscription state
-- Brand-level usage metering and access checks for members, active campaigns, scheduled work, and templates
-- Brand billing/settings page with plan details, upgrade prompts, and recent plan audit events
-- Content template model and CRUD workflow
-- Dashboard analytics for campaign status, draft pipeline, review activity, and schedule pressure
-- Internal helper tools for brand guidelines, templates, content validation, campaign assets, and review summaries
-- Advanced content-operation helpers for brand voice validation, cross-channel adaptation, template recommendation, asset recommendation, and feedback-to-checklist conversion
-- Optional FastAPI-MCP exposure isolated behind helper-tool routes
-- Tool usage logging and admin visibility for helper tool availability, recent executions, and request/result traces filtered by draft
-- Collaboration comments with threaded replies on campaigns and drafts
-- Mentions parsing for comments and review notes using `@email`
-- Assignment workflows for campaigns, drafts, and review tasks
-- In-app notifications for mentions, review requests, decisions, assignments, and due-soon reminders
-- Notifications center plus collaboration-aware campaign activity feed updates
-- Campaign planning workspace with board, list, and calendar switching
-- Stage-based board interactions that map onto each brand's configured workflow
-- Platform preview surfaces for LinkedIn, Instagram captions, email, and blog/article layouts
-- Lightweight draft-editor enhancements with quick-insert writing tools and content stats
-- Campaign health scoring with transparent per-factor penalties
-- Team workload analytics for draft ownership, reviewer queues, and bottlenecks by status
-- Approval turnaround analytics covering review timing, rejection rate, and repeat revision cycles
-- Content mix analytics by platform, content type, campaign status, and week/month volume
-- Alembic migrations for Phases 1 through 10
+- The frontend provides the authenticated workspace UI and route-based page structure.
+- The backend exposes REST APIs under `/api`.
+- PostgreSQL stores workspace, campaign, draft, review, collaboration, and analytics source data.
+- The MCP helper layer is mounted separately and can be enabled or disabled without breaking the core app.
 
-## Quick start
+### Frontend navigation model
+
+- Overview: dashboard and notifications
+- Workspace: brands, projects, campaigns, calendar
+- Production: drafts, reviews, templates
+- Intelligence: AI assist/helper tools and billing
+
+### Backend domain model
+
+Identity and workspace:
+
+- `users`
+- `brands`
+- `brand_memberships`
+- `plans`
+- `brand_subscriptions`
+
+Planning and execution:
+
+- `projects`
+- `campaigns`
+- `content_briefs`
+- `campaign_milestones`
+- `campaign_dependencies`
+- `calendar_items`
+
+Production:
+
+- `content_drafts`
+- `draft_versions`
+- `draft_reviews`
+- `campaign_assets`
+- `content_templates`
+
+Collaboration and observability:
+
+- `collaboration_comments`
+- `mentions`
+- `assignments`
+- `notifications`
+- `audit_logs`
+- `tool_usage_logs`
+
+## Project Design Process
+
+This product was intentionally designed and implemented in phases so each layer of the system had stable foundations before more advanced workflow or AI-assisted behavior was added.
+
+### Phase breakdown
+
+1. Foundation: authentication, brands, memberships, projects, campaigns, and initial app shell
+2. Content core: briefs, drafts, campaign workspace, search, and filters
+3. Review loop: comments, approvals, rejections, and review queue
+4. Production support: assets, version history, and calendar scheduling
+5. Reuse and controls: templates, analytics baseline, plans, subscriptions, and usage checks
+6. MCP helper foundation: helper tools, isolated MCP exposure, and tool usage logging
+7. Collaboration layer: threaded comments, mentions, assignments, notifications, and richer activity history
+8. Planning UX: board view, platform previews, stronger campaign workspace ergonomics
+9. Operational intelligence: campaign health, workload analytics, approval analytics, and content-mix reporting
+10. Workflow realism: configurable brand workflows, milestones, and dependency-aware planning
+11. Advanced content ops: brand voice validation, adaptation, recommendations, and revision checklist helpers
+
+### Why the project was designed this way
+
+- Early phases established durable entities such as brands, campaigns, and drafts before UX polish or AI tooling.
+- Review and collaboration were added before advanced automation so human workflow remained the system backbone.
+- Analytics were introduced after enough operational data existed to make them meaningful.
+- Flexible workflows came after fixed-status flows proved the product shape, allowing migration toward more realistic brand-specific processes.
+- MCP was kept modular and isolated so the application still works as a normal campaign platform if helper tooling is disabled.
+
+## Local Development
+
+### Quick start
 
 1. Copy the environment file:
 
@@ -58,144 +246,126 @@ Phase 11 workspace for multi-brand campaign planning, configurable draft workflo
    cp .env.example .env
    ```
 
-2. Start the application:
+2. Start the stack:
 
    ```bash
    docker compose up --build
    ```
 
-3. Open:
+   Or:
+
+   ```bash
+   make up
+   ```
+
+3. Open the application:
 
 - Frontend: `http://localhost:5173`
 - Backend API: `http://localhost:8000/api`
 - Health check: `http://localhost:8000/api/healthz`
-- MCP HTTP mount: `http://localhost:8000/mcp`
+- MCP mount: `http://localhost:8000/mcp`
 
 The backend container runs `alembic upgrade head` before starting the FastAPI server.
 
-## MCP helper configuration
+### Environment variables
 
-- `MCP_HELPERS_ENABLED=true` keeps the helper MCP server mounted.
-- `MCP_MOUNT_PATH=/mcp` controls the shared MCP mount path.
-- `MCP_ENABLE_HTTP_TRANSPORT=true` enables streamable HTTP transport.
-- `MCP_ENABLE_SSE_TRANSPORT=false` leaves SSE off unless you explicitly need it.
-- The helper REST endpoints remain available under `/api/tools/helpers/*` even if the MCP layer is disabled.
+- `POSTGRES_DB`
+- `POSTGRES_USER`
+- `POSTGRES_PASSWORD`
+- `DATABASE_URL`
+- `JWT_SECRET_KEY`
+- `ACCESS_TOKEN_EXPIRE_MINUTES`
+- `FRONTEND_ORIGIN`
+- `VITE_API_BASE_URL`
 
-## Phase 10 workflow
+### Useful commands
 
-1. Create an account from the login page.
-2. Create a brand workspace.
-3. Review the starter subscription and usage posture from the billing page.
-4. Create projects inside the brand.
-5. Create campaigns inside a project.
-6. Add or update a campaign brief in the campaign workspace.
-7. Save reusable templates for campaign briefs, draft copy, review notes, or launch copy.
-8. Configure brand-specific draft stages from the brand settings page when the default workflow does not match the team's process.
-9. Create drafts for the campaign and place them into one of the brand's allowed initial stages.
-10. Track milestone targets and completion from the campaign workspace.
-11. Add campaign dependencies so milestone or draft-stage work waits on prerequisite steps.
-12. Submit drafts into review from the draft detail page.
-13. Reviewers add comments, approve drafts, or reject them with feedback.
-14. Editors revise rejected drafts and resubmit them for review.
-15. Track campaign activity from the campaign workspace timeline and use the review queue to process pending items.
-16. Use the dashboard analytics view to monitor campaign status, draft throughput, review actions, blocked work, and schedule pressure.
-17. Filter drafts by campaign, platform, status, or search term.
-18. Invite additional members from the brand page.
-19. Upgrade or rebalance the brand plan as usage approaches current limits.
-20. Review the helper tool catalog and recent advanced tool activity from the Helper Tools page.
-21. Use the helper routes directly or through the MCP mount when an MCP client is configured.
-22. Run advanced helper operations from the draft detail page to validate tone, adapt copy, rank templates or assets, and convert review feedback into a checklist.
-23. Assign campaign, draft, or review-task ownership directly from the workspace pages.
-24. Use `@email` mentions in draft discussion, campaign discussion, and review notes.
-25. Follow collaboration events from the notifications center and campaign activity feed.
-26. Switch the campaign planner between board, list, and calendar views depending on the planning task.
-27. Move drafts across the planner board using the brand workflow while blocked states remain visible.
-28. Use the draft detail preview panel to inspect LinkedIn, Instagram, email, and article layouts while editing copy.
-29. Use the dashboard to identify which campaigns are healthy, slipping, or critical and inspect the exact penalty factors behind each score.
-30. Review team workload, reviewer queues, revision churn, and content-mix trends before reallocating work.
+- `make up`
+- `make down`
+- `make logs`
+- `make ps`
 
-## Backend entities in this phase
+### Optional demo data workflow
 
-- `users`
-- `brands`
-- `brand_memberships`
-- `plans`
-- `brand_subscriptions`
-- `projects`
-- `campaigns`
-- `content_briefs`
-- `content_drafts`
-- `content_templates`
-- `draft_reviews`
-- `draft_versions`
-- `campaign_milestones`
-- `campaign_dependencies`
-- `calendar_items`
-- `audit_logs`
-- `tool_usage_logs`
-- `collaboration_comments`
-- `mentions`
-- `assignments`
-- `notifications`
+1. Start the stack.
+2. Create an account from the login page.
+3. Seed a realistic demo workspace for that account:
 
-## API areas
+   ```bash
+   docker compose exec backend python scripts/seed_demo_workspace.py --email your-email@example.com
+   ```
+
+The seed script attaches demo brands, projects, campaigns, briefs, drafts, templates, assignments, and notifications to the specified existing user.
+
+## MCP Helper Configuration
+
+- `MCP_HELPERS_ENABLED=true` keeps the helper MCP server mounted
+- `MCP_MOUNT_PATH=/mcp` controls the shared mount path
+- `MCP_ENABLE_HTTP_TRANSPORT=true` enables streamable HTTP transport
+- `MCP_ENABLE_SSE_TRANSPORT=false` keeps SSE disabled unless explicitly needed
+- The helper REST endpoints remain available under `/api/tools/helpers/*` even if MCP is disabled
+
+## Key API Areas
+
+### Auth and workspace
 
 - `/api/auth`
-- `/api/dashboard`
-- `/api/dashboard/analytics`
-- `/api/dashboard/campaign-health`
-- `/api/dashboard/campaign-health/{campaign_id}`
 - `/api/brands`
+- `/api/brands/{brand_id}/memberships`
+- `/api/brands/{brand_id}/audit-logs`
 - `/api/brands/{brand_id}/billing`
 - `/api/brands/{brand_id}/subscription`
 - `/api/projects`
 - `/api/campaigns`
+
+### Campaign operations
+
 - `/api/campaigns/{campaign_id}/overview`
+- `/api/campaigns/{campaign_id}/brief`
 - `/api/campaigns/{campaign_id}/comments`
 - `/api/campaigns/{campaign_id}/assignments`
-- `/api/campaigns/{campaign_id}/brief`
 - `/api/campaigns/{campaign_id}/milestones`
-- `/api/campaigns/{campaign_id}/milestones/{milestone_id}`
 - `/api/campaigns/{campaign_id}/dependencies`
-- `/api/campaigns/{campaign_id}/dependencies/{dependency_id}`
+- `/api/campaigns/{campaign_id}/assets`
+
+### Draft operations
+
 - `/api/drafts`
 - `/api/drafts/review-queue`
 - `/api/drafts/{draft_id}/comments`
 - `/api/drafts/{draft_id}/assignments`
 - `/api/drafts/{draft_id}/reviews`
+- `/api/drafts/{draft_id}/versions`
 - `/api/drafts/{draft_id}/move-stage`
 - `/api/drafts/{draft_id}/submit`
 - `/api/drafts/{draft_id}/approve`
 - `/api/drafts/{draft_id}/reject`
 - `/api/drafts/{draft_id}/resubmit`
-- `/api/assignments`
-- `/api/notifications`
+
+### Analytics, templates, and tools
+
+- `/api/dashboard/summary`
+- `/api/dashboard/analytics`
+- `/api/dashboard/campaign-health`
+- `/api/dashboard/campaign-health/{campaign_id}`
+- `/api/calendar-items`
 - `/api/templates`
+- `/api/notifications`
+- `/api/notifications/summary`
+- `/api/assignments/mine`
 - `/api/tools/helpers`
 - `/api/tools/catalog`
 - `/api/tools/usage`
 
-## Notes
+## Implementation Notes
 
-- Membership invitations are stored without outbound email sending.
-- Owner membership updates and ownership transfer are intentionally deferred.
-- The frontend stores the JWT token locally and restores the session on reload.
 - Each campaign can have one brief and many drafts.
-- Campaign planning now supports board, list, and calendar views inside the campaign workspace.
-- Each brand owns its draft workflow configuration, including custom stages, stage colors, transition rules, and initial entry stages.
-- Board stage moves intentionally route through the configured workflow and review rules rather than bypassing them.
-- Campaign milestones are seeded per campaign and can be targeted, annotated, and marked complete from the workspace.
-- Dependencies can block milestone completion or draft stage transitions until the prerequisite step is satisfied.
-- Draft previews render from the existing `ContentDraft` fields instead of a separate preview-only model.
-- Campaign health starts at `100` and subtracts capped penalties for overdue drafts, pending approvals, missing assets, unassigned work, and deadline pressure inside the next 7 days.
-- Approval turnaround is measured from `submitted` or `resubmitted` to the next approval or rejection event.
-- Content mix trends are based on draft creation volume and can be grouped by week or month from the dashboard.
-- Reviewer approvals only operate on drafts currently mapped to the workflow's review stage.
-- New brands receive the seeded `starter` plan by default.
-- Plan changes and template actions are recorded in the existing audit log stream.
-- Usage checks are currently enforced for member count, active campaigns, upcoming scheduled items, and template count.
-- The MCP layer is optional. Base product routes remain available even if MCP is disabled or `fastapi-mcp` is unavailable at runtime.
-- Helper tool usage is recorded in `tool_usage_logs` with compact request/result summaries plus full request/result traces, success state, and draft/campaign target metadata.
-- Collaboration permissions stay aligned to the existing brand-level RBAC model.
-- Assignment creation uses workspace-management roles, while assignees can complete their own open assignments.
-- Due-soon notifications are generated from open assignments with due dates inside the notification sync window.
+- Brands own their workflow configuration, including stage labels, transition rules, colors, and initial entry stages.
+- Planner stage moves intentionally route through workflow and dependency checks rather than bypassing them.
+- Reviewer approval actions only apply to drafts currently in the configured review stage.
+- Campaign health starts at `100` and subtracts capped penalties for overdue drafts, pending approvals, missing assets, unassigned work, and near-term deadline pressure.
+- Approval turnaround is measured from submission or resubmission to the next approval or rejection event.
+- Usage checks currently focus on member count, active campaigns, upcoming scheduled items, and template count.
+- Invitation records exist without outbound email sending.
+- The frontend stores the JWT token locally and restores the session on reload.
+- The MCP layer is optional; the base REST product remains functional even if MCP support is disabled or unavailable.
